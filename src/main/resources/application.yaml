@@ -1,3 +1,23 @@
 spring:
   application:
     name: digital-wallet
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/digital_wallet
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    properties:
+      hibernate:
+        format_sql: true
+    show-sql: true
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+
+server:
+  port: 8080
