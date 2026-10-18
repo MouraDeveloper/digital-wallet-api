@@ -52,6 +52,19 @@ public class AppUser {
             String email,
             String passwordHash
     ){
+
+        if (fullName == null || fullName.isBlank()) {
+            throw new IllegalArgumentException("Full name cannot be null or blank.");
+        }
+
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email cannot be null or blank.");
+        }
+
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("Password hash cannot be null or blank.");
+        }
+
         return new AppUser(
                 fullName,
                 email,
