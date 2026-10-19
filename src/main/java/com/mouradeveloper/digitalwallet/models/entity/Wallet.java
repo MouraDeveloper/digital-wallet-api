@@ -6,6 +6,7 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -35,10 +36,51 @@ public class Wallet {
     private Instant createdAt;
 
 
-    @Builder
-    public Wallet(
+    private Wallet(
             AppUser user
     ){
         this.user = user;
+    }
+
+
+    public static Wallet create(AppUser user){
+        if (user == null){
+            throw new IllegalArgumentException("User cannot be null.");
+        }
+
+        return new Wallet(user);
+    }
+
+    public void deposit(BigDecimal amount){
+        validateAmount(amount);
+
+        this.balance = this.balance.add(amount);
+    }
+
+    public void withdraw(BigDecimal amount){
+        validateAmount(amount);
+
+        if(amount.compareTo(this.balance) > 0){
+            throw new IllegalArgumentException("Insufficient funds.");
+        }
+
+        this.balance = this.balance.subtract(amount);
+    }
+
+
+    private static void validateAmount(BigDecimal amount){
+        if (amount == null){
+            throw new IllegalArgumentException("Amount cannot be null.");
+        }
+
+        if (amount.compareTo(BigDecimal.ZERO) <= 0){
+            throw new IllegalArgumentException("Amount must be greater than zero.");
+        }
+
+        try {
+            amount.setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException e) {
+            throw new IllegalArgumentException("Amount must have at most two decimal places.");
+        }
     }
 }
