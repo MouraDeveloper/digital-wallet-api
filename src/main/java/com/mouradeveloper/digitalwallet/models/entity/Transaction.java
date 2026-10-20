@@ -1,5 +1,8 @@
 package com.mouradeveloper.digitalwallet.models.entity;
 
+import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
+import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
+import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
 import jakarta.persistence.*;
 import lombok.*;
@@ -65,15 +68,15 @@ public class Transaction {
         validateAmount(amount);
 
         if (source == null) {
-            throw new IllegalArgumentException("Source wallet must not be null.");
+            throw new BusinessRuleException("Source wallet must not be null for a transfer transaction.");
         }
 
         if (destination == null) {
-            throw new IllegalArgumentException("Destination wallet must not be null.");
+            throw new BusinessRuleException("Destination wallet must not be null.");
         }
 
         if (source.getId() != null && source.getId().equals(destination.getId())) {
-            throw new IllegalArgumentException("Source and destination wallets must be different.");
+            throw new SameWalletTransferException();
         }
 
         return new Transaction(
@@ -91,7 +94,7 @@ public class Transaction {
         validateAmount(amount);
 
         if (destination == null) {
-            throw new IllegalArgumentException("Destination wallet must not be null.");
+            throw new BusinessRuleException("Destination wallet must not be null.");
         }
 
         return new Transaction(
@@ -105,13 +108,13 @@ public class Transaction {
 
     private static void validateAmount(BigDecimal amount){
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("Amount must be greater than zero.");
+            throw new InvalidAmountException();
         }
 
         try {
             amount.setScale(2, RoundingMode.UNNECESSARY);
         } catch (ArithmeticException e) {
-            throw new IllegalArgumentException("Amount must have at most two decimal places.");
+            throw new InvalidAmountException();
         }
     }
 }

@@ -1,5 +1,8 @@
 package com.mouradeveloper.digitalwallet.models.entity;
 
+import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
+import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
+import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -45,7 +48,7 @@ public class Wallet {
 
     public static Wallet create(AppUser user){
         if (user == null){
-            throw new IllegalArgumentException("User cannot be null.");
+            throw new BusinessRuleException("User cannot be null when creating a wallet.");
         }
 
         return new Wallet(user);
@@ -61,7 +64,7 @@ public class Wallet {
         validateAmount(amount);
 
         if(amount.compareTo(this.balance) > 0){
-            throw new IllegalArgumentException("Insufficient funds.");
+            throw new InsufficientFundsException();
         }
 
         this.balance = this.balance.subtract(amount);
@@ -70,17 +73,17 @@ public class Wallet {
 
     private static void validateAmount(BigDecimal amount){
         if (amount == null){
-            throw new IllegalArgumentException("Amount cannot be null.");
+            throw new InvalidAmountException();
         }
 
         if (amount.compareTo(BigDecimal.ZERO) <= 0){
-            throw new IllegalArgumentException("Amount must be greater than zero.");
+            throw new InvalidAmountException();
         }
 
         try {
             amount.setScale(2, RoundingMode.UNNECESSARY);
         } catch (ArithmeticException e) {
-            throw new IllegalArgumentException("Amount must have at most two decimal places.");
+            throw new InvalidAmountException();
         }
     }
 }

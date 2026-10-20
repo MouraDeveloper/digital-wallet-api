@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.models.entity;
 
+import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -54,15 +55,15 @@ public class AppUser {
     ){
 
         if (fullName == null || fullName.isBlank()) {
-            throw new IllegalArgumentException("Full name cannot be null or blank.");
+            throw new BusinessRuleException("Full name cannot be null or blank.");
         }
 
         if (email == null || email.isBlank()) {
-            throw new IllegalArgumentException("Email cannot be null or blank.");
+            throw new BusinessRuleException("Email cannot be null or blank.");
         }
 
         if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("Password hash cannot be null or blank.");
+            throw new BusinessRuleException("Password hash cannot be null or blank.");
         }
 
         return new AppUser(
