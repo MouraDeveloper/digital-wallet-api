@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.exception;
 
 import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
+import com.mouradeveloper.digitalwallet.exception.conflict.ConflictException;
 import com.mouradeveloper.digitalwallet.exception.notFound.NotFoundException;
 import com.mouradeveloper.digitalwallet.models.dto.error.StandardError;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +29,14 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ){
         return buildErrorResponse(ex, HttpStatus.UNPROCESSABLE_CONTENT, request.getRequestURI());
+    }
+
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<StandardError> handleConflictException(
+            ConflictException ex,
+            HttpServletRequest request
+    ){
+        return buildErrorResponse(ex, HttpStatus.CONFLICT, request.getRequestURI());
     }
 
 
