@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.service;
 
+import com.mouradeveloper.digitalwallet.exception.notFound.TransactionNotFoundException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
 import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
@@ -12,7 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
+
 
 @Service
 @RequiredArgsConstructor
@@ -42,11 +45,33 @@ public class TransactionService {
         return transactionMapper.toResponse(transactionSaved);
     }
 
+    @Transactional(readOnly = true)
+    public TransactionDto.Response findById(Long transactionId) {
+        return transactionMapper.toResponse(findTransactionOrThrow(transactionId));
+    }
+
+    @Transactional(readOnly = true)
+    public List<TransactionDto.Response> findByWalletId(UUID walletId) {
+        findWalletOrThrow(walletId);
+
+        return transactionRepository.findBySourceWallet_IdOrDestinationWallet_Id(walletId, walletId)
+                .stream()
+                .map(transactionMapper::toResponse)
+                .toList();
+    }
+
 
     private Wallet findWalletOrThrow(UUID walletId) {
         return walletRepository.findById(walletId)
                 .orElseThrow(
                         () -> new WalletNotFoundException(walletId)
+                );
+    }
+
+    private Transaction findTransactionOrThrow(Long transactionId) {
+        return transactionRepository.findById(transactionId)
+                .orElseThrow(
+                        () -> new TransactionNotFoundException(transactionId)
                 );
     }
 }
