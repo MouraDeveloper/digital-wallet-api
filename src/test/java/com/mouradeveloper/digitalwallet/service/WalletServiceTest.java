@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.service;
 
+import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.WalletMapper;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
@@ -66,6 +67,22 @@ public class WalletServiceTest {
                 .save(Mockito.any(Transaction.class));
     }
 
+    @Test
+    void shouldThrowInvalidAmountExceptionWhenDepositAmountIsNegative() {
+        var walletId = UUID.randomUUID();
+        var amount = BigDecimal.valueOf(-1.00);
+
+        var appUser = createAppUser();
+        var wallet = createWallet(appUser);
+
+        mockWalletRepository(walletId, wallet);
+
+        Assertions.assertThrows(InvalidAmountException.class, () -> walletService.deposit(walletId, amount));
+
+        Mockito.verify(transactionRepository, Mockito.never())
+                .save(Mockito.any(Transaction.class));
+    }
+
 
     private static AppUser createAppUser() {
         return AppUser.create(
@@ -84,7 +101,6 @@ public class WalletServiceTest {
         Mockito.when(walletRepository.findById(walletId))
                 .thenReturn(Optional.empty());
     }
-
 
     private static Wallet createWallet(AppUser appUser) {
         return Wallet.create(appUser);
