@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.service;
 
+import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
@@ -17,6 +18,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
+
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 public class TransactionServiceTest {
@@ -57,6 +60,35 @@ public class TransactionServiceTest {
         Assertions.assertEquals(BigDecimal.valueOf(150.00), walletDestination.getBalance());
 
         Mockito.verify(transactionRepository)
+                .save(Mockito.any(Transaction.class));
+    }
+
+    @Test
+    void shouldFailTransferWhenBalanceIsInsufficient() {
+        var walletSourceId = UUID.randomUUID();
+        var walletDestinationId = UUID.randomUUID();
+        var amount = BigDecimal.valueOf(150.00);
+
+        var user1 = createAppUser();
+        var user2 = createAppUser();
+
+        var walletSource = createWallet(user1);
+        var walletDestination = createWallet(user2);
+
+        walletSource.deposit(BigDecimal.valueOf(100.00));
+
+        mockWalletSource(walletSourceId, walletSource);
+        mockWalletDestination(walletDestinationId, walletDestination);
+
+        Assertions.assertThrows(InsufficientFundsException.class, () -> transactionService.createTransfer(
+                walletSourceId, walletDestinationId, amount)
+        );
+
+        Assertions.assertEquals(BigDecimal.valueOf(100.00), walletSource.getBalance());
+
+        Assertions.assertEquals(BigDecimal.ZERO, walletDestination.getBalance());
+
+        Mockito.verify(transactionRepository, never())
                 .save(Mockito.any(Transaction.class));
     }
 
