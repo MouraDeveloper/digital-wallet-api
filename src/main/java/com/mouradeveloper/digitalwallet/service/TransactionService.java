@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.service;
 
+import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.exception.notFound.TransactionNotFoundException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
@@ -32,6 +33,10 @@ public class TransactionService {
             UUID destinationWalletId,
             BigDecimal amount
     ) {
+        if (sourceWalletId.equals(destinationWalletId)) {
+            throw new SameWalletTransferException();
+        }
+
         var sourceWallet = findWalletOrThrow(sourceWalletId);
         var destinationWallet = findWalletOrThrow(destinationWalletId);
 

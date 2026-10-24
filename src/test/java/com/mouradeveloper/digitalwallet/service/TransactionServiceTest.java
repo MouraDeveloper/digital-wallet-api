@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
+import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
@@ -87,6 +88,25 @@ public class TransactionServiceTest {
         Assertions.assertEquals(BigDecimal.valueOf(100.00), walletSource.getBalance());
 
         Assertions.assertEquals(BigDecimal.ZERO, walletDestination.getBalance());
+
+        Mockito.verify(transactionRepository, never())
+                .save(Mockito.any(Transaction.class));
+    }
+
+    @Test
+    void shouldThrowSameWalletTransferExceptionWhenSourceAndDestinationAreSame() {
+        var walletId = UUID.randomUUID();
+
+        var user = createAppUser();
+        var wallet = createWallet(user);
+
+        wallet.deposit(BigDecimal.valueOf(100.00));
+
+        Assertions.assertThrows(SameWalletTransferException.class, () -> transactionService.createTransfer(
+                walletId, walletId, BigDecimal.valueOf(100.00))
+        );
+
+        Assertions.assertEquals(BigDecimal.valueOf(100.00), wallet.getBalance());
 
         Mockito.verify(transactionRepository, never())
                 .save(Mockito.any(Transaction.class));
