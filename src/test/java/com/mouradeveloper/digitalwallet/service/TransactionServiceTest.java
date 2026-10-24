@@ -2,6 +2,7 @@ package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
+import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
@@ -112,6 +113,37 @@ public class TransactionServiceTest {
                 .save(Mockito.any(Transaction.class));
     }
 
+    @Test
+    void shouldThrowWalletNotFoundExceptionWhenSourceWalletDoesNotExist() {
+        var sourceWalletId = UUID.randomUUID();
+        var destinationWalletId = UUID.randomUUID();
+
+        mockWalletNotFound(sourceWalletId);
+        Assertions.assertThrows(WalletNotFoundException.class, () -> transactionService.createTransfer(
+                sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00))
+        );
+
+        Mockito.verify(transactionRepository, never())
+                .save(Mockito.any(Transaction.class));
+    }
+
+    @Test
+    void shouldThrowWalletNotFoundExceptionWhenDestinationWalletDoesNotExist() {
+        var sourceWalletId = UUID.randomUUID();
+        var destinationWalletId = UUID.randomUUID();
+
+        mockWalletSource(sourceWalletId, createWallet(createAppUser()));
+        mockWalletNotFound(destinationWalletId);
+
+        Assertions.assertThrows(WalletNotFoundException.class, () -> transactionService.createTransfer(
+                sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00)
+        ));
+
+        Mockito.verify(transactionRepository, never())
+                .save(Mockito.any(Transaction.class));
+
+    }
+
 
     private void mockWalletDestination(
             UUID walletDestinationId,
@@ -127,6 +159,13 @@ public class TransactionServiceTest {
     ) {
         Mockito.when(walletRepository.findById(walletSourceId))
                 .thenReturn(Optional.of(walletSource));
+    }
+
+    private void mockWalletNotFound(
+            UUID walletSourceId
+    ) {
+        Mockito.when(walletRepository.findById(walletSourceId))
+                .thenReturn(Optional.empty());
     }
 
     private static AppUser createAppUser() {
