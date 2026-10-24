@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
+import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
@@ -143,6 +144,30 @@ public class TransactionServiceTest {
                 .save(Mockito.any(Transaction.class));
 
     }
+
+    @Test
+    void shouldThrowInvalidAmountExceptionWhenTransferAmountIsInvalid() {
+        var sourceWalletId = UUID.randomUUID();
+        var destinationWalletId = UUID.randomUUID();
+        var amount = BigDecimal.ZERO;
+
+        var walletSource = createWallet(createAppUser());
+        var walletDestination = createWallet(createAppUser());
+
+        mockWalletSource(sourceWalletId, walletSource);
+        mockWalletDestination(destinationWalletId, walletDestination);
+
+        Assertions.assertThrows(InvalidAmountException.class, () -> transactionService.createTransfer(
+                sourceWalletId, destinationWalletId, amount
+        ));
+
+        Assertions.assertEquals(BigDecimal.ZERO, walletDestination.getBalance());
+        Assertions.assertEquals(BigDecimal.ZERO, walletSource.getBalance());
+
+        Mockito.verify(transactionRepository, never())
+                .save(Mockito.any(Transaction.class));
+    }
+
 
 
     private void mockWalletDestination(
