@@ -241,6 +241,17 @@ public class TransactionServiceTest {
         );
     }
 
+    @Test
+    void shouldThrowWalletNotFoundExceptionWhenFindingTransactionsForNonexistentWallet() {
+        var walletId = UUID.randomUUID();
+
+        mockWalletNotFound(walletId);
+
+        Assertions.assertThrows(
+                WalletNotFoundException.class, () -> transactionService.findByWalletId(walletId)
+        );
+    }
+
 
     private void mockWalletHistory(
             UUID walletId,
