@@ -3,8 +3,10 @@ package com.mouradeveloper.digitalwallet.service;
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
+import com.mouradeveloper.digitalwallet.exception.notFound.TransactionNotFoundException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
+import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
@@ -19,6 +21,7 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -168,7 +171,127 @@ public class TransactionServiceTest {
                 .save(Mockito.any(Transaction.class));
     }
 
+    @Test
+    void shouldReturnTransactionWhenTransactionExists() {
 
+        Long transactionId = 1L;
+
+        var walletDestination = createWallet(createAppUser());
+
+        Transaction transaction = Transaction.deposit(
+                walletDestination,
+                BigDecimal.valueOf(100.00)
+        );
+
+        TransactionDto.Response transactionDto = createTransactionResponse(transactionId, transaction);
+
+        mockTransaction(transactionId, transaction);
+
+        mockTransactionMapperResponse(transaction, transactionDto);
+
+        var response = transactionService.findById(transactionId);
+
+        Assertions.assertEquals(transactionDto, response);
+    }
+
+    @Test
+    void shouldThrowTransactionNotFoundExceptionWhenTransactionDoesNotExist() {
+        var transactionId = 1L;
+
+        mockTransactionNotFound(transactionId);
+
+        Assertions.assertThrows(
+                TransactionNotFoundException.class, () -> transactionService.findById(transactionId)
+        );
+    }
+
+    @Test
+    void shouldReturnTransactionsWhenWalletExists() {
+        var walletId = UUID.randomUUID();
+        var wallet = createWallet(createAppUser());
+
+        mockWalletSource(walletId, wallet);
+
+        Transaction transaction1 = Transaction.deposit(
+                wallet,
+                BigDecimal.valueOf(100.00)
+        );
+
+        Transaction transaction2 = Transaction.deposit(
+                wallet,
+                BigDecimal.valueOf(200.00)
+        );
+
+        TransactionDto.Response transactionDto1 =
+                createTransactionResponse(1L, transaction1);
+
+        TransactionDto.Response transactionDto2 =
+                createTransactionResponse(2L, transaction2);
+
+        mockWalletHistory(walletId, transaction1, transaction2);
+
+        mockTransactionMapperResponse(transaction1, transactionDto1);
+        mockTransactionMapperResponse(transaction2, transactionDto2);
+
+        var response = transactionService.findByWalletId(walletId);
+
+        Assertions.assertEquals(
+                List.of(transactionDto1, transactionDto2),
+                response
+        );
+    }
+
+
+    private void mockWalletHistory(
+            UUID walletId,
+            Transaction transaction1,
+            Transaction transaction2
+    ) {
+        Mockito.when(
+                transactionRepository.findBySourceWallet_IdOrDestinationWallet_Id(
+                        walletId,
+                        walletId
+                )
+        ).thenReturn(
+                List.of(transaction1, transaction2)
+        );
+    }
+
+    private void mockTransactionNotFound(
+            Long transactionId
+    ) {
+        Mockito.when(transactionRepository.findById(transactionId))
+                .thenReturn(Optional.empty());
+    }
+
+    private void mockTransaction(
+            Long transactionId,
+            Transaction transaction
+    ) {
+        Mockito.when(transactionRepository.findById(transactionId))
+                .thenReturn(Optional.of(transaction));
+    }
+
+    private TransactionDto.Response createTransactionResponse(
+            Long transactionId,
+            Transaction transaction
+    ) {
+        return new TransactionDto.Response(
+                transactionId,
+                transaction.getType(),
+                null,
+                UUID.randomUUID(),
+                transaction.getAmount(),
+                null
+        );
+    }
+
+    private void mockTransactionMapperResponse(
+            Transaction transaction, TransactionDto.Response transactionDto
+    ) {
+        Mockito.when(transactionMapper.toResponse(Mockito.same(transaction)))
+                .thenReturn(transactionDto);
+    }
 
     private void mockWalletDestination(
             UUID walletDestinationId,
