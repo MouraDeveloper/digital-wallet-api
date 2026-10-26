@@ -75,6 +75,10 @@ public class Transaction {
             throw new BusinessRuleException("Destination wallet must not be null.");
         }
 
+        if (source == destination) {
+            throw new SameWalletTransferException();
+        }
+
         if (source.getId() != null && source.getId().equals(destination.getId())) {
             throw new SameWalletTransferException();
         }
