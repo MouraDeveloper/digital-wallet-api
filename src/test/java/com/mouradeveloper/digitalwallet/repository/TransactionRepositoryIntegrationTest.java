@@ -71,8 +71,35 @@ public class TransactionRepositoryIntegrationTest {
         Assertions.assertEquals(transaction.getId(), transactions.getFirst().getId());
     }
 
+    @Test
+    void shouldFindTransactionWhenWalletIsDestination() {
+        var firstUser = createAppUser("email01@gmail.com");
+        appUserRepository.save(firstUser);
+        var secondUser = createAppUser("email02@gmail.com");
+        appUserRepository.save(secondUser);
 
-    private AppUser createAppUser(String email){
+        var firstWallet = Wallet.create(firstUser);
+        walletRepository.save(firstWallet);
+        var secondWallet = Wallet.create(secondUser);
+        walletRepository.save(secondWallet);
+
+        var transaction = Transaction.transfer(
+                firstWallet,
+                secondWallet,
+                BigDecimal.valueOf(100.00)
+        );
+
+        transactionRepository.save(transaction);
+
+        var transactions = transactionRepository.findBySourceWallet_IdOrDestinationWallet_Id(
+                secondWallet.getId(), secondWallet.getId());
+
+        Assertions.assertEquals(1, transactions.size());
+
+        Assertions.assertEquals(transaction.getId(), transactions.getFirst().getId());
+    }
+
+    private AppUser createAppUser(String email) {
         return AppUser.create(
                 "teste",
                 email,
