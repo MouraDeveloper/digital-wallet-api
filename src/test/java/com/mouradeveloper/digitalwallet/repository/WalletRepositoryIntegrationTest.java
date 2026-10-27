@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -49,6 +50,21 @@ public class WalletRepositoryIntegrationTest {
         Assertions.assertTrue(wallet1.isPresent());
         Assertions.assertEquals(wallet.getId(), wallet1.get().getId());
         Assertions.assertEquals(appUser.getId(), wallet1.get().getUser().getId());
+    }
+
+    @Test
+    void shouldNotAllowMoreThanOneWalletForSameUser() {
+        var appUser = createValidAppUser();
+        appUserRepository.save(appUser);
+
+        var firstWallet = Wallet.create(appUser);
+        walletRepository.save(firstWallet);
+
+        var secondWallet = Wallet.create(appUser);
+
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> walletRepository.saveAndFlush(secondWallet)
+        );
     }
 
 
