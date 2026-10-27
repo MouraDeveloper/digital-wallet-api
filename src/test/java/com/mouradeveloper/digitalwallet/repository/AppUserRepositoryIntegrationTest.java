@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -34,10 +35,7 @@ public class AppUserRepositoryIntegrationTest {
 
     @Test
     void shouldSaveAndFindUserByEmail() {
-        var appUser = AppUser.create(
-                "John Doe",
-                "email123@gmail.com",
-                "password123");
+        var appUser = createValidAppUser();
 
         appUserRepository.save(appUser);
 
@@ -45,5 +43,42 @@ public class AppUserRepositoryIntegrationTest {
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals(appUser.getEmail(), user.getEmail());
+    }
+
+    @Test
+    void shouldReturnTrueWhenEmailExists() {
+        var appUser = createValidAppUser();
+        appUserRepository.save(appUser);
+
+        var exists = appUserRepository.existsByEmail(appUser.getEmail());
+
+        Assertions.assertTrue(exists);
+    }
+
+    @Test
+    void shouldReturnFalseWhenEmailDoesNotExist() {
+        var appUser = createValidAppUser();
+
+        Assertions.assertFalse(appUserRepository.existsByEmail(appUser.getEmail()));
+    }
+
+    @Test
+    void shouldNotAllowDuplicateEmail() {
+        var appUser = createValidAppUser();
+        appUserRepository.save(appUser);
+
+        var appuser2 = createValidAppUser();
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> appUserRepository.saveAndFlush(appuser2)
+        );
+    }
+
+
+    private AppUser createValidAppUser() {
+        return  AppUser.create(
+                "teste",
+                "teste123@gmail.com",
+                "teste123"
+        );
     }
 }
