@@ -3,6 +3,7 @@ package com.mouradeveloper.digitalwallet.repository;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
+import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Testcontainers
 @DataJpaTest
@@ -118,13 +120,12 @@ public class TransactionRepositoryIntegrationTest {
 
         Assertions.assertThrows(
                 DataIntegrityViolationException.class, () -> {
-                    jdbcTemplate.update(
-                            "INSERT INTO transactions (type, source_wallet_id, destination_wallet_id, amount) "
-                                    + "VALUES (?, ?, ?, ?)",
+                    insertTransactionJdbc(
                             "TRANSFER",
                             sourceWallet.getId(),
                             destinationWallet.getId(),
-                            BigDecimal.ZERO);
+                            BigDecimal.ZERO
+                    );
                 }
         );
     }
@@ -139,9 +140,7 @@ public class TransactionRepositoryIntegrationTest {
 
         Assertions.assertThrows(
                 DataIntegrityViolationException.class, () -> {
-                    jdbcTemplate.update(
-                            "INSERT INTO transactions (type, source_wallet_id, destination_wallet_id, amount)" +
-                                    " VALUES (?, ?, ?, ?)",
+                    insertTransactionJdbc(
                             "TRANSFER",
                             sourceWallet.getId(),
                             null,
@@ -151,6 +150,41 @@ public class TransactionRepositoryIntegrationTest {
         );
     }
 
+    @Test
+    void shouldAllowDepositWithoutSourceWallet() {
+        var appUser = createAppUser("test1@gmail.com");
+        appUserRepository.save(appUser);
+        var wallet = Wallet.create(appUser);
+        walletRepository.save(wallet);
+
+        var transaction = Transaction.deposit(wallet, BigDecimal.valueOf(100.00));
+        transactionRepository.save(transaction);
+        var transactionFound = transactionRepository.findById(transaction.getId());
+
+        Assertions.assertTrue(transactionFound.isPresent());
+
+        Assertions.assertEquals(wallet.getId(), transactionFound.get().getDestinationWallet().getId());
+
+        Assertions.assertNull(transactionFound.get().getSourceWallet());
+
+        Assertions.assertEquals(TypeEnum.DEPOSIT, transactionFound.get().getType());
+    }
+
+
+    private void insertTransactionJdbc(
+            String type,
+            UUID sourceWalletId,
+            UUID destinationWalletId,
+            BigDecimal amount
+    ) {
+        jdbcTemplate.update(
+                "INSERT INTO transactions (type, source_wallet_id, destination_wallet_id, amount)" +
+                        " VALUES (?, ?, ?, ?)",
+                type,
+                sourceWalletId,
+                destinationWalletId,
+                amount);
+    }
 
     private AppUser createAppUser(String email) {
         return AppUser.create(
