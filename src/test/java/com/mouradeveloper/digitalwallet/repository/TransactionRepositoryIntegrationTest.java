@@ -129,6 +129,29 @@ public class TransactionRepositoryIntegrationTest {
         );
     }
 
+    @Test
+    void shouldNotAllowTransactionWithoutDestinationWallet() {
+        var user = createAppUser("test1@gmal.com");
+        appUserRepository.save(user);
+
+        var sourceWallet = Wallet.create(user);
+        walletRepository.save(sourceWallet);
+
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> {
+                    jdbcTemplate.update(
+                            "INSERT INTO transactions (type, source_wallet_id, destination_wallet_id, amount)" +
+                                    " VALUES (?, ?, ?, ?)",
+                            "TRANSFER",
+                            sourceWallet.getId(),
+                            null,
+                            BigDecimal.valueOf(100.00)
+                    );
+                }
+        );
+    }
+
+
     private AppUser createAppUser(String email) {
         return AppUser.create(
                 "teste",
