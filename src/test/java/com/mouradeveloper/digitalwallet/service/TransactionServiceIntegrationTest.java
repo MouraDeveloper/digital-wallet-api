@@ -175,6 +175,29 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertEquals(0, transactionRepository.count());
     }
 
+    @Test
+    @Transactional
+    void shouldNotTransferWhenDestinationWalletDoesNotExist() {
+        var sourceUser = createAppUser("test1@gmail.com");
+        appUserRepository.save(sourceUser);
+
+        var wallet = Wallet.create(sourceUser);
+        walletRepository.save(wallet);
+
+        var destinationWalletId = UUID.randomUUID();
+
+        Assertions.assertThrows(
+                WalletNotFoundException.class, () -> transactionService.createTransfer(
+                        wallet.getId(),
+                        destinationWalletId,
+                        BigDecimal.valueOf(100.00)
+                )
+        );
+
+        Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getBalance()));
+        Assertions.assertEquals(0, transactionRepository.count());
+    }
+
 
     private AppUser createAppUser(String email) {
         return AppUser.create("test user", email, "hashedPassword");
