@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
+import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
@@ -120,6 +121,35 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(destinationWallet.getBalance()));
         Assertions.assertEquals(0, transactionRepository.count());
     }
+
+    @Test
+    @Transactional
+    void shouldNotTransferWhenSourceAndDestinationAreSameWallet() {
+        var amount = BigDecimal.valueOf(100.00);
+
+        var sourceUser = createAppUser("test1@gmail.com");
+        appUserRepository.save(sourceUser);
+
+        var sourceWallet = Wallet.create(sourceUser);
+        walletRepository.save(sourceWallet);
+
+        sourceWallet.deposit(BigDecimal.valueOf(200.00));
+
+        Assertions.assertThrows(
+                SameWalletTransferException.class, () -> transactionService.createTransfer(
+                        sourceWallet.getId(),
+                        sourceWallet.getId(),
+                        amount
+                )
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(200.00).compareTo(sourceWallet.getBalance())
+        );
+        Assertions.assertEquals(0, transactionRepository.count());
+    }
+
 
     private AppUser createAppUser(String email) {
         return AppUser.create("test user", email, "hashedPassword");
