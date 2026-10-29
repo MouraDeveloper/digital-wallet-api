@@ -2,6 +2,7 @@ package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
+import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
@@ -21,6 +22,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 @Testcontainers
 @SpringBootTest
@@ -147,6 +149,29 @@ public class TransactionServiceIntegrationTest {
                 0,
                 BigDecimal.valueOf(200.00).compareTo(sourceWallet.getBalance())
         );
+        Assertions.assertEquals(0, transactionRepository.count());
+    }
+
+    @Test
+    @Transactional
+    void shouldNotTransferWhenSourceWalletDoesNotExist() {
+        var destinationUser = createAppUser("test1@gmail.com");
+        appUserRepository.save(destinationUser);
+
+        var wallet = Wallet.create(destinationUser);
+        walletRepository.save(wallet);
+
+        var sourceWalletId = UUID.randomUUID();
+
+        Assertions.assertThrows(
+                WalletNotFoundException.class, () -> transactionService.createTransfer(
+                        sourceWalletId,
+                        wallet.getId(),
+                        BigDecimal.valueOf(100.00)
+                )
+        );
+
+        Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getBalance()));
         Assertions.assertEquals(0, transactionRepository.count());
     }
 
