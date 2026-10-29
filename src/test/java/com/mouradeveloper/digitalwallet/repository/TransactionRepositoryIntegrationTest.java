@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.junit.jupiter.Container;
@@ -40,6 +42,9 @@ public class TransactionRepositoryIntegrationTest {
 
     @Autowired
     private WalletRepository walletRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
 
     @Test
@@ -97,6 +102,31 @@ public class TransactionRepositoryIntegrationTest {
         Assertions.assertEquals(1, transactions.size());
 
         Assertions.assertEquals(transaction.getId(), transactions.getFirst().getId());
+    }
+
+    @Test
+    void shouldNotAllowTransactionWithZeroAmount() {
+        var firstUser = createAppUser("test1@gmail.com");
+        appUserRepository.save(firstUser);
+        var secondUser = createAppUser("test2@gmail.com");
+        appUserRepository.save(secondUser);
+
+        var sourceWallet = Wallet.create(firstUser);
+        walletRepository.save(sourceWallet);
+        var destinationWallet = Wallet.create(secondUser);
+        walletRepository.save(destinationWallet);
+
+        Assertions.assertThrows(
+                DataIntegrityViolationException.class, () -> {
+                    jdbcTemplate.update(
+                            "INSERT INTO transactions (type, source_wallet_id, destination_wallet_id, amount) "
+                                    + "VALUES (?, ?, ?, ?)",
+                            "TRANSFER",
+                            sourceWallet.getId(),
+                            destinationWallet.getId(),
+                            BigDecimal.ZERO);
+                }
+        );
     }
 
     private AppUser createAppUser(String email) {
