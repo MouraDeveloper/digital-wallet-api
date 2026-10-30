@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -49,32 +50,74 @@ public class AppUserControllerIntegrationTest {
     private AppUserRepository appUserRepository;
 
     @Test
+    @Transactional
     void shouldCreateUserAndReturnCreated() throws Exception {
         var email = "test123@gmail.com";
-        var fullName = "test";
-        var password = "password123";
 
-        AppUserDto.Request request = new AppUserDto.Request(
-                fullName,
-                email,
-                password
-        );
+        var appUser = createAppUserDtoRequest(email);
 
-        var json = objectMapper.writeValueAsString(request);
+        var json = objectMapper.writeValueAsString(appUser);
 
         mockMvc.perform(post("/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.fullName").value(fullName))
-                .andExpect(jsonPath("$.email").value(email))
+                .andExpect(jsonPath("$.fullName").value(appUser.fullName()))
+                .andExpect(jsonPath("$.email").value(appUser.email()))
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.createdAt").exists());
 
         var savedUser = appUserRepository.findByEmail(email);
 
+        Assertions.assertNotNull(savedUser);
         Assertions.assertNotNull(savedUser.getId());
         Assertions.assertEquals(email, savedUser.getEmail());
-        Assertions.assertEquals(fullName, savedUser.getFullName());
+        Assertions.assertEquals(appUser.fullName(), savedUser.getFullName());
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnConflictWhenEmailAlreadyExists() throws Exception {
+        var email = "test123@gmail.com";
+        var appUser = createAppUserDtoRequest(email);
+
+        var json = objectMapper.writeValueAsString(appUser);
+
+        mockMvc.perform(post("/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.email").value(appUser.email()))
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.createdAt").exists());
+
+        mockMvc.perform(post("/users")
+                        .content(json)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.path").value("/users"))
+                .andExpect(jsonPath("$.message")
+                        .value("Email " + email + " already exists."))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        var savedUser = appUserRepository.findByEmail(email);
+
+        Assertions.assertNotNull(savedUser);
+        Assertions.assertEquals(email, savedUser.getEmail());
+        Assertions.assertEquals(appUser.fullName(), savedUser.getFullName());
+    }
+
+
+    private AppUserDto.Request createAppUserDtoRequest(String email) {
+        var fullName = "test";
+        var password = "password123";
+
+        return new AppUserDto.Request(
+                fullName,
+                email,
+                password
+        );
     }
 }
