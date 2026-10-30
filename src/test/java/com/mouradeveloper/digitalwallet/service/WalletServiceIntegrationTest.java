@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.service;
 
 
+import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
@@ -19,6 +20,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 @Testcontainers
 @SpringBootTest
@@ -81,6 +83,23 @@ public class WalletServiceIntegrationTest {
         Assertions.assertEquals(0, BigDecimal.valueOf(100.00).compareTo(transaction.getAmount()));
         Assertions.assertNull(transaction.getSourceWallet());
         Assertions.assertEquals(wallet.getId(), transaction.getDestinationWallet().getId());
+    }
+
+    @Test
+    @Transactional
+    void shouldNotDepositWhenWalletDoesNotExist() {
+        var uuid = UUID.randomUUID();
+
+        Assertions.assertThrows(
+                WalletNotFoundException.class, () -> walletService.deposit(
+                        uuid,
+                        BigDecimal.valueOf(100.00)
+                )
+        );
+
+        Assertions.assertEquals(
+                0, transactionRepository.count()
+        );
     }
 
 
