@@ -9,6 +9,7 @@ import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,9 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
 
 @Testcontainers
 @SpringBootTest
@@ -52,6 +56,13 @@ public class TransactionServiceIntegrationTest {
 
     @Autowired
     private TransactionRepository transactionRepository;
+
+    @AfterEach
+    void cleanUp() {
+        transactionRepository.deleteAll();
+        walletRepository.deleteAll();
+        appUserRepository.deleteAll();
+    }
 
 
     @Test
@@ -196,6 +207,126 @@ public class TransactionServiceIntegrationTest {
 
         Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getBalance()));
         Assertions.assertEquals(0, transactionRepository.count());
+    }
+
+    @Test
+    void shouldPreventConcurrentTransfersFromOverspending() throws Exception {
+        var sourceUser = appUserRepository.saveAndFlush(
+                AppUser.create("Source User", "source.concurrent@gmail.com", "password123")
+        );
+
+        var destinationUserA = appUserRepository.saveAndFlush(
+                AppUser.create("Destination A", "destination.a@gmail.com", "password123")
+        );
+
+        var destinationUserB = appUserRepository.saveAndFlush(
+                AppUser.create("Destination B", "destination.b@gmail.com", "password123")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100));
+
+        var destinationWalletA = Wallet.create(destinationUserA);
+        var destinationWalletB = Wallet.create(destinationUserB);
+
+        var savedWallets = walletRepository.saveAllAndFlush(
+                List.of(sourceWallet, destinationWalletA, destinationWalletB)
+        );
+
+        var savedSourceWallet = savedWallets.get(0);
+        var savedDestinationWalletA = savedWallets.get(1);
+        var savedDestinationWalletB = savedWallets.get(2);
+
+        var executor = Executors.newFixedThreadPool(2);
+
+        var readyLatch = new CountDownLatch(2);
+        var startLatch = new CountDownLatch(1);
+
+        var successCount = 0;
+        var insufficientFundsCount = 0;
+
+        try {
+            var transferA = executor.submit(() -> {
+                readyLatch.countDown();
+                startLatch.await();
+
+                return transactionService.createTransfer(
+                        savedSourceWallet.getId(),
+                        savedDestinationWalletA.getId(),
+                        BigDecimal.valueOf(80)
+                );
+            });
+
+            var transferB = executor.submit(() -> {
+                readyLatch.countDown();
+                startLatch.await();
+
+                return transactionService.createTransfer(
+                        savedSourceWallet.getId(),
+                        savedDestinationWalletB.getId(),
+                        BigDecimal.valueOf(80)
+                );
+            });
+
+            readyLatch.await();
+
+            startLatch.countDown();
+
+            try {
+                transferA.get();
+                successCount++;
+            } catch (ExecutionException e) {
+                Assertions.assertInstanceOf(
+                        InsufficientFundsException.class,
+                        e.getCause()
+                );
+                insufficientFundsCount++;
+            }
+
+            try {
+                transferB.get();
+                successCount++;
+            } catch (ExecutionException e) {
+                Assertions.assertInstanceOf(
+                        InsufficientFundsException.class,
+                        e.getCause()
+                );
+                insufficientFundsCount++;
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        Assertions.assertEquals(1, successCount);
+        Assertions.assertEquals(1, insufficientFundsCount);
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var updatedSourceWallet = walletRepository
+                .findById(savedSourceWallet.getId())
+                .orElseThrow();
+
+        var updatedDestinationWalletA = walletRepository
+                .findById(savedDestinationWalletA.getId())
+                .orElseThrow();
+
+        var updatedDestinationWalletB = walletRepository
+                .findById(savedDestinationWalletB.getId())
+                .orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(20)
+                        .compareTo(updatedSourceWallet.getBalance())
+        );
+
+        var destinationTotal = updatedDestinationWalletA.getBalance()
+                .add(updatedDestinationWalletB.getBalance());
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(80)
+                        .compareTo(destinationTotal)
+        );
     }
 
 

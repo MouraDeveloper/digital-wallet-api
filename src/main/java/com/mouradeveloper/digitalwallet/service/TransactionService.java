@@ -37,8 +37,16 @@ public class TransactionService {
             throw new SameWalletTransferException();
         }
 
-        var sourceWallet = findWalletOrThrow(sourceWalletId);
-        var destinationWallet = findWalletOrThrow(destinationWalletId);
+        Wallet sourceWallet;
+        Wallet destinationWallet;
+
+        if (sourceWalletId.compareTo(destinationWalletId) < 0) {
+            sourceWallet = findWalletForUpdateOrThrow(sourceWalletId);
+            destinationWallet = findWalletForUpdateOrThrow(destinationWalletId);
+        } else {
+            destinationWallet = findWalletForUpdateOrThrow(destinationWalletId);
+            sourceWallet = findWalletForUpdateOrThrow(sourceWalletId);
+        }
 
         var transaction = Transaction.transfer(sourceWallet, destinationWallet, amount);
 
@@ -77,6 +85,13 @@ public class TransactionService {
         return transactionRepository.findById(transactionId)
                 .orElseThrow(
                         () -> new TransactionNotFoundException(transactionId)
+                );
+    }
+
+    private Wallet findWalletForUpdateOrThrow(UUID walletId) {
+        return walletRepository.findByIdForUpdate(walletId)
+                .orElseThrow(
+                        () -> new WalletNotFoundException(walletId)
                 );
     }
 }
