@@ -204,6 +204,21 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$[0].createdAt").exists());
     }
 
+    @Test
+    @Transactional
+    void shouldReturnNotFoundWhenTransactionDoesNotExist() throws Exception {
+        var transactionId = 999999L;
+
+        mockMvc.perform(get("/transactions/{id}", transactionId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.path").value("/transactions/" + transactionId))
+                .andExpect(jsonPath("$.message")
+                        .value("Transaction with ID " + transactionId + " not found."))
+                .andExpect(jsonPath("$.timestamp").exists());
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
