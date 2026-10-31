@@ -17,6 +17,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.UUID;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -71,5 +73,20 @@ public class WalletControllerIntegrationTest {
                 .andExpect(jsonPath("$.userId").value(savedUser.getId().toString()))
                 .andExpect(jsonPath("$.balance").value(savedWallet.getBalance().doubleValue()))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnNotFoundWhenWalletDoesNotExist() throws Exception {
+        var uuid = UUID.randomUUID();
+
+        mockMvc.perform(get("/wallets/{id}", uuid))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message")
+                        .value("Wallet with ID " + uuid + " not found."))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.path").value("/wallets/" + uuid))
+                .andExpect(jsonPath("$.error").value("Not Found"));
     }
 }
