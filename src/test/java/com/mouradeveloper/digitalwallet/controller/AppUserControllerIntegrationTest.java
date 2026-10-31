@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.controller;
 
 import com.mouradeveloper.digitalwallet.models.dto.AppUserDto;
+import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -17,6 +18,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -128,6 +130,24 @@ public class AppUserControllerIntegrationTest {
 
     }
 
+    @Test
+    @Transactional
+    void shouldFindUserByIdAndReturnOk() throws Exception {
+        var appUser = AppUser.create(
+                "test",
+                "test123@gmail.com",
+                "hashed-password"
+        );
+
+        var savedUser = appUserRepository.saveAndFlush(appUser);
+
+        mockMvc.perform(get("/users/{id}", savedUser.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(savedUser.getId().toString()))
+                .andExpect(jsonPath("$.fullName").value(savedUser.getFullName()))
+                .andExpect(jsonPath("$.email").value(savedUser.getEmail()))
+                .andExpect(jsonPath("$.createdAt").exists());
+    }
 
     private AppUserDto.Request createAppUserDtoRequest(String email) {
         var fullName = "test";
