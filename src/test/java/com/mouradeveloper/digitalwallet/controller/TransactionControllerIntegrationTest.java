@@ -219,6 +219,60 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 
+    @Test
+    @Transactional
+    void shouldReturnUnprocessableContentWhenSourceHasInsufficientFunds() throws Exception {
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("source@gmail.com")
+        );
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("destination@gmail.com")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(50));
+
+        var destinationWallet = Wallet.create(destinationUser);
+
+        var savedWallets = walletRepository.saveAllAndFlush(
+                List.of(sourceWallet, destinationWallet)
+        );
+
+        var savedSourceWallet = savedWallets.getFirst();
+        var savedDestinationWallet = savedWallets.getLast();
+
+        var transferRequest = new TransactionDto.TransferRequest(
+                savedSourceWallet.getId(),
+                savedDestinationWallet.getId(),
+                BigDecimal.valueOf(100)
+        );
+
+        var json = objectMapper.writeValueAsString(transferRequest);
+
+        mockMvc.perform(post("/transactions/create-transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.status").value(422))
+                .andExpect(jsonPath("$.error").value("Unprocessable Content"))
+                .andExpect(jsonPath("$.path").value("/transactions/create-transfer"))
+                .andExpect(jsonPath("$.message").value("Insufficient funds."))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        Assertions.assertEquals(0, transactionRepository.count());
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(50).compareTo(savedSourceWallet.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(savedDestinationWallet.getBalance())
+        );
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
