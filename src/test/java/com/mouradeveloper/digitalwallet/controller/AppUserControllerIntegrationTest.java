@@ -109,6 +109,25 @@ public class AppUserControllerIntegrationTest {
         Assertions.assertEquals(appUser.fullName(), savedUser.getFullName());
     }
 
+    @Test
+    @Transactional
+    void shouldReturnBadRequestWhenEmailIsInvalid() throws Exception {
+        var appUser = createAppUserDtoRequest("abc");
+
+        var json = objectMapper.writeValueAsString(appUser);
+
+        mockMvc.perform(post("/users")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.path").value("/users"))
+                .andExpect(jsonPath("$.message").value("Validation failed"))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+    }
+
 
     private AppUserDto.Request createAppUserDtoRequest(String email) {
         var fullName = "test";
