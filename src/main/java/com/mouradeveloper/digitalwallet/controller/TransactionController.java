@@ -4,8 +4,10 @@ import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.service.TransactionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -21,13 +23,12 @@ public class TransactionController {
     public ResponseEntity<TransactionDto.Response> createTransfer(
             @RequestBody @Valid TransactionDto.TransferRequest transferRequest
     ) {
-        return ResponseEntity.ok(
-                transactionService.createTransfer(
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(transactionService.createTransfer(
                         transferRequest.sourceWalletId(),
                         transferRequest.destinationWalletId(),
                         transferRequest.amount()
-                )
-        );
+                ));
     }
 
 
