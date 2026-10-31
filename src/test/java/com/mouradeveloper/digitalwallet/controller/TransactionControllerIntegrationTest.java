@@ -2,6 +2,7 @@ package com.mouradeveloper.digitalwallet.controller;
 
 import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
+import com.mouradeveloper.digitalwallet.models.entity.Transaction;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
@@ -23,6 +24,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -114,6 +116,49 @@ public class TransactionControllerIntegrationTest {
         );
 
         Assertions.assertEquals(1, transactionRepository.count());
+    }
+
+    @Test
+    @Transactional
+    void shouldFindTransactionByIdAndReturnOk() throws Exception {
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("source@gmail.com")
+        );
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("destination@gmail.com")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(500));
+
+        var destinationWallet = Wallet.create(destinationUser);
+
+        var savedWallets = walletRepository.saveAllAndFlush(
+                List.of(sourceWallet, destinationWallet)
+        );
+
+        var savedSourceWallet = savedWallets.getFirst();
+        var savedDestinationWallet = savedWallets.getLast();
+
+        var transaction = Transaction.transfer(
+                savedSourceWallet,
+                savedDestinationWallet,
+                BigDecimal.valueOf(100)
+        );
+
+        var savedTransaction = transactionRepository.saveAndFlush(transaction);
+
+        mockMvc.perform(get("/transactions/{id}", savedTransaction.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(savedTransaction.getId()))
+                .andExpect(jsonPath("$.type").value("TRANSFER"))
+                .andExpect(jsonPath("$.sourceWalletId")
+                        .value(savedSourceWallet.getId().toString()))
+                .andExpect(jsonPath("$.destinationWalletId")
+                        .value(savedDestinationWallet.getId().toString()))
+                .andExpect(jsonPath("$.amount").value(100))
+                .andExpect(jsonPath("$.createdAt").exists());
     }
 
 
