@@ -106,13 +106,37 @@ public class WalletControllerIntegrationTest {
         var json = objectMapper.writeValueAsString(depositRequest);
 
         mockMvc.perform(post("/wallets/deposit")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value(savedUser.getId().toString()))
                 .andExpect(jsonPath("$.balance").value(100))
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andExpect(jsonPath("$.id").value(savedWallet.getId().toString()));
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnNotFoundWhenDepositingIntoNonexistentWallet() throws Exception {
+        var uuid = UUID.randomUUID();
+
+        var depositRequest = new TransactionDto.DepositRequest(
+                uuid,
+                BigDecimal.valueOf(100)
+        );
+
+        var json = objectMapper.writeValueAsString(depositRequest);
+
+        mockMvc.perform(post("/wallets/deposit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.path").value("/wallets/deposit"))
+                .andExpect(jsonPath("$.message")
+                        .value("Wallet with ID " + uuid + " not found."))
+                .andExpect(jsonPath("$.timestamp").exists());
     }
 
 
