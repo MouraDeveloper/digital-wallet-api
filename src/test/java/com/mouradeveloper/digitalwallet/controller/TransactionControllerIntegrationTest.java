@@ -161,6 +161,49 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.createdAt").exists());
     }
 
+    @Test
+    @Transactional
+    void shouldFindTransactionsByWalletIdAndReturnOk() throws Exception {
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("source@gmail.com")
+        );
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("destination@gmail.com")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(500));
+
+        var destinationWallet = Wallet.create(destinationUser);
+
+        var savedWallets = walletRepository.saveAllAndFlush(
+                List.of(sourceWallet, destinationWallet)
+        );
+
+        var savedSourceWallet = savedWallets.getFirst();
+        var savedDestinationWallet = savedWallets.getLast();
+
+        var transaction = Transaction.transfer(
+                savedSourceWallet,
+                savedDestinationWallet,
+                BigDecimal.valueOf(100)
+        );
+
+        transactionRepository.saveAndFlush(transaction);
+
+        mockMvc.perform(get("/transactions/wallet/{walletId}", savedSourceWallet.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").exists())
+                .andExpect(jsonPath("$[0].type").value("TRANSFER"))
+                .andExpect(jsonPath("$[0].sourceWalletId")
+                        .value(savedSourceWallet.getId().toString()))
+                .andExpect(jsonPath("$[0].destinationWalletId")
+                        .value(savedDestinationWallet.getId().toString()))
+                .andExpect(jsonPath("$[0].amount").value(100))
+                .andExpect(jsonPath("$[0].createdAt").exists());
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
