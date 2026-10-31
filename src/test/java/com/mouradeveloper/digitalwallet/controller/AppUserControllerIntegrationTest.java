@@ -18,6 +18,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.UUID;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -148,6 +150,21 @@ public class AppUserControllerIntegrationTest {
                 .andExpect(jsonPath("$.email").value(savedUser.getEmail()))
                 .andExpect(jsonPath("$.createdAt").exists());
     }
+
+    @Test
+    @Transactional
+    void shouldReturnNotFoundWhenUserDoesNotExist() throws Exception {
+        var uuid = UUID.randomUUID();
+
+        mockMvc.perform(get("/users/{id}", uuid))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.path").value("/users/" + uuid))
+                .andExpect(jsonPath("$.message").value("User with ID " + uuid + " not found."))
+                .andExpect(jsonPath("$.timestamp").exists());
+    }
+
 
     private AppUserDto.Request createAppUserDtoRequest(String email) {
         var fullName = "test";
