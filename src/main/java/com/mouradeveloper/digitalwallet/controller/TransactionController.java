@@ -21,13 +21,15 @@ public class TransactionController {
 
     @PostMapping("/create-transfer")
     public ResponseEntity<TransactionDto.Response> createTransfer(
-            @RequestBody @Valid TransactionDto.TransferRequest transferRequest
+            @RequestBody @Valid TransactionDto.TransferRequest transferRequest,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(transactionService.createTransfer(
                         transferRequest.sourceWalletId(),
                         transferRequest.destinationWalletId(),
-                        transferRequest.amount()
+                        transferRequest.amount(),
+                        idempotencyKey
                 ));
     }
 

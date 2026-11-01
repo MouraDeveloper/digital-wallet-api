@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.exception;
 
+import com.mouradeveloper.digitalwallet.exception.badRequest.BadRequestException;
 import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
 import com.mouradeveloper.digitalwallet.exception.conflict.ConflictException;
 import com.mouradeveloper.digitalwallet.exception.notFound.NotFoundException;
@@ -38,6 +39,14 @@ public class GlobalExceptionHandler {
             HttpServletRequest request
     ){
         return buildErrorResponse(ex, HttpStatus.CONFLICT, request.getRequestURI());
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<StandardError> handleBadRequestException(
+            BadRequestException ex,
+            HttpServletRequest request
+    ){
+        return buildErrorResponse(ex, HttpStatus.BAD_REQUEST, request.getRequestURI());
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

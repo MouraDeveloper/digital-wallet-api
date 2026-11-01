@@ -46,24 +46,30 @@ public class Transaction {
     @Column(nullable = false, name = "created_at", updatable = false)
     private Instant createdAt;
 
+    @Column(name = "idempotency_key", unique = true, updatable = false, length = 255)
+    private String idempotencyKey;
+
 
     private Transaction(
             TypeEnum type,
             Wallet sourceWallet,
             Wallet destinationWallet,
-            BigDecimal amount
+            BigDecimal amount,
+            String idempotencyKey
     ) {
         this.type = type;
         this.sourceWallet = sourceWallet;
         this.destinationWallet = destinationWallet;
         this.amount = amount;
+        this.idempotencyKey = idempotencyKey;
     }
 
 
     public static Transaction transfer(
             Wallet source,
             Wallet destination,
-            BigDecimal amount
+            BigDecimal amount,
+            String idempotencyKey
     ) {
         validateAmount(amount);
 
@@ -87,7 +93,8 @@ public class Transaction {
                 TypeEnum.TRANSFER,
                 source,
                 destination,
-                amount
+                amount,
+                idempotencyKey
         );
     }
 
@@ -105,12 +112,13 @@ public class Transaction {
                 TypeEnum.DEPOSIT,
                 null,
                 destination,
-                amount
+                amount,
+                null
         );
     }
 
 
-    private static void validateAmount(BigDecimal amount){
+    private static void validateAmount(BigDecimal amount) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new InvalidAmountException();
         }

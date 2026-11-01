@@ -1,6 +1,8 @@
 package com.mouradeveloper.digitalwallet.service;
 
+import com.mouradeveloper.digitalwallet.exception.badRequest.InvalidIdempotencyKeyException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
+import com.mouradeveloper.digitalwallet.exception.conflict.IdempotencyConflictException;
 import com.mouradeveloper.digitalwallet.exception.notFound.TransactionNotFoundException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
@@ -31,8 +33,25 @@ public class TransactionService {
     public TransactionDto.Response createTransfer(
             UUID sourceWalletId,
             UUID destinationWalletId,
-            BigDecimal amount
+            BigDecimal amount,
+            String idempotencyKey
     ) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new InvalidIdempotencyKeyException();
+        }
+
+        var existingTransaction =
+                transactionRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingTransaction.isPresent()) {
+            return validateExistingTransaction(
+                    existingTransaction.get(),
+                    sourceWalletId,
+                    destinationWalletId,
+                    amount
+            );
+        }
+
         if (sourceWalletId.equals(destinationWalletId)) {
             throw new SameWalletTransferException();
         }
@@ -48,7 +67,24 @@ public class TransactionService {
             sourceWallet = findWalletForUpdateOrThrow(sourceWalletId);
         }
 
-        var transaction = Transaction.transfer(sourceWallet, destinationWallet, amount);
+        var existingTransactionAfterLock =
+                transactionRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingTransactionAfterLock.isPresent()) {
+            return validateExistingTransaction(
+                    existingTransactionAfterLock.get(),
+                    sourceWalletId,
+                    destinationWalletId,
+                    amount
+            );
+        }
+
+        var transaction = Transaction.transfer(
+                sourceWallet,
+                destinationWallet,
+                amount,
+                idempotencyKey
+        );
 
         sourceWallet.withdraw(amount);
         destinationWallet.deposit(amount);
@@ -93,5 +129,32 @@ public class TransactionService {
                 .orElseThrow(
                         () -> new WalletNotFoundException(walletId)
                 );
+    }
+
+    private TransactionDto.Response validateExistingTransaction(
+            Transaction existingTransaction,
+            UUID sourceWalletId,
+            UUID destinationWalletId,
+            BigDecimal amount
+    ) {
+        boolean sameSource =
+                existingTransaction.getSourceWallet()
+                        .getId()
+                        .equals(sourceWalletId);
+
+        boolean sameDestination =
+                existingTransaction.getDestinationWallet()
+                        .getId()
+                        .equals(destinationWalletId);
+
+        boolean sameAmount =
+                existingTransaction.getAmount()
+                        .compareTo(amount) == 0;
+
+        if (!sameSource || !sameDestination || !sameAmount) {
+            throw new IdempotencyConflictException();
+        }
+
+        return transactionMapper.toResponse(existingTransaction);
     }
 }
