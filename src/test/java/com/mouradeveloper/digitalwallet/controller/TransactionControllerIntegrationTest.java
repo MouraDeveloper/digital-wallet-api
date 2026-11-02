@@ -144,7 +144,7 @@ public class TransactionControllerIntegrationTest {
         var transaction = Transaction.transfer(
                 savedSourceWallet,
                 savedDestinationWallet,
-                BigDecimal.valueOf(100)
+                BigDecimal.valueOf(100), "test-idempotency-key"
         );
 
         var savedTransaction = transactionRepository.saveAndFlush(transaction);
@@ -187,7 +187,7 @@ public class TransactionControllerIntegrationTest {
         var transaction = Transaction.transfer(
                 savedSourceWallet,
                 savedDestinationWallet,
-                BigDecimal.valueOf(100)
+                BigDecimal.valueOf(100), "test-idempotency-key"
         );
 
         transactionRepository.saveAndFlush(transaction);

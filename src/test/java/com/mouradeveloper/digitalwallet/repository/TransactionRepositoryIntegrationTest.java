@@ -64,7 +64,7 @@ public class TransactionRepositoryIntegrationTest {
         var transaction = Transaction.transfer(
                 firstWallet,
                 secondWallet,
-                BigDecimal.valueOf(100.00)
+                BigDecimal.valueOf(100.00), "test-idempotency-key"
         );
 
         transactionRepository.save(transaction);
@@ -93,7 +93,7 @@ public class TransactionRepositoryIntegrationTest {
         var transaction = Transaction.transfer(
                 firstWallet,
                 secondWallet,
-                BigDecimal.valueOf(100.00)
+                BigDecimal.valueOf(100.00), "test-idempotency-key"
         );
 
         transactionRepository.save(transaction);

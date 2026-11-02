@@ -60,7 +60,7 @@ public class TransactionServiceTest {
 
         walletSource.deposit(BigDecimal.valueOf(500.00));
 
-        transactionService.createTransfer(walletSourceId, walletDestinationId, amount);
+        transactionService.createTransfer(walletSourceId, walletDestinationId, amount, "test-idempotency-key");
 
         Assertions.assertEquals(BigDecimal.valueOf(350.00), walletSource.getBalance());
         Assertions.assertEquals(BigDecimal.valueOf(150.00), walletDestination.getBalance());
@@ -87,7 +87,7 @@ public class TransactionServiceTest {
         mockWalletDestination(walletDestinationId, walletDestination);
 
         Assertions.assertThrows(InsufficientFundsException.class, () -> transactionService.createTransfer(
-                walletSourceId, walletDestinationId, amount)
+                walletSourceId, walletDestinationId, amount, "test-idempotency-key")
         );
 
         Assertions.assertEquals(BigDecimal.valueOf(100.00), walletSource.getBalance());
@@ -108,7 +108,7 @@ public class TransactionServiceTest {
         wallet.deposit(BigDecimal.valueOf(100.00));
 
         Assertions.assertThrows(SameWalletTransferException.class, () -> transactionService.createTransfer(
-                walletId, walletId, BigDecimal.valueOf(100.00))
+                walletId, walletId, BigDecimal.valueOf(100.00), "test-idempotency-key")
         );
 
         Assertions.assertEquals(BigDecimal.valueOf(100.00), wallet.getBalance());
@@ -124,7 +124,7 @@ public class TransactionServiceTest {
 
         mockWalletNotFound(sourceWalletId);
         Assertions.assertThrows(WalletNotFoundException.class, () -> transactionService.createTransfer(
-                sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00))
+                sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00), "test-idempotency-key")
         );
 
         Mockito.verify(transactionRepository, never())
@@ -140,7 +140,7 @@ public class TransactionServiceTest {
         mockWalletNotFound(destinationWalletId);
 
         Assertions.assertThrows(WalletNotFoundException.class, () -> transactionService.createTransfer(
-                sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00)
+                sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00), "test-idempotency-key"
         ));
 
         Mockito.verify(transactionRepository, never())
@@ -161,7 +161,7 @@ public class TransactionServiceTest {
         mockWalletDestination(destinationWalletId, walletDestination);
 
         Assertions.assertThrows(InvalidAmountException.class, () -> transactionService.createTransfer(
-                sourceWalletId, destinationWalletId, amount
+                sourceWalletId, destinationWalletId, amount, "test-idempotency-key"
         ));
 
         Assertions.assertEquals(BigDecimal.ZERO, walletDestination.getBalance());

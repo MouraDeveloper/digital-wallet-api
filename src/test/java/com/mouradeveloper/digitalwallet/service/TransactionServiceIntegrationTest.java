@@ -84,7 +84,8 @@ public class TransactionServiceIntegrationTest {
         transactionService.createTransfer(
                 sourceWallet.getId(),
                 destinationWallet.getId(),
-                amount
+                amount,
+                "test-idempotency-key"
         );
 
         Assertions.assertEquals(amount, sourceWallet.getBalance());
@@ -126,7 +127,8 @@ public class TransactionServiceIntegrationTest {
                 InsufficientFundsException.class, () -> transactionService.createTransfer(
                         sourceWallet.getId(),
                         destinationWallet.getId(),
-                        amount
+                        amount,
+                        "test-idempotency-key"
                 )
         );
 
@@ -152,7 +154,8 @@ public class TransactionServiceIntegrationTest {
                 SameWalletTransferException.class, () -> transactionService.createTransfer(
                         sourceWallet.getId(),
                         sourceWallet.getId(),
-                        amount
+                        amount,
+                        "test-idempotency-key"
                 )
         );
 
@@ -178,7 +181,8 @@ public class TransactionServiceIntegrationTest {
                 WalletNotFoundException.class, () -> transactionService.createTransfer(
                         sourceWalletId,
                         wallet.getId(),
-                        BigDecimal.valueOf(100.00)
+                        BigDecimal.valueOf(100.00),
+                        "test-idempotency-key"
                 )
         );
 
@@ -201,7 +205,8 @@ public class TransactionServiceIntegrationTest {
                 WalletNotFoundException.class, () -> transactionService.createTransfer(
                         wallet.getId(),
                         destinationWalletId,
-                        BigDecimal.valueOf(100.00)
+                        BigDecimal.valueOf(100.00),
+                        "test-idempotency-key"
                 )
         );
 
@@ -253,7 +258,8 @@ public class TransactionServiceIntegrationTest {
                 return transactionService.createTransfer(
                         savedSourceWallet.getId(),
                         savedDestinationWalletA.getId(),
-                        BigDecimal.valueOf(80)
+                        BigDecimal.valueOf(80),
+                        "concurrent-transfer-a"
                 );
             });
 
@@ -264,7 +270,8 @@ public class TransactionServiceIntegrationTest {
                 return transactionService.createTransfer(
                         savedSourceWallet.getId(),
                         savedDestinationWalletB.getId(),
-                        BigDecimal.valueOf(80)
+                        BigDecimal.valueOf(80),
+                        "concurrent-transfer-b"
                 );
             });
 
