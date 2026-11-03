@@ -5,6 +5,7 @@ import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsExce
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.exception.conflict.IdempotencyConflictException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
+import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
@@ -26,9 +27,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 @Testcontainers
 @SpringBootTest
@@ -443,6 +442,102 @@ public class TransactionServiceIntegrationTest {
     @Transactional
     void shouldThrowWhenIdempotencyKeyIsNull() {
         assertInvalidIdempotencyKey(null);
+    }
+
+    @Test
+    void shouldHandleConcurrentRetriesWithSameIdempotencyKey()
+            throws ExecutionException, InterruptedException {
+
+        var idempotencyKey = "concurrent-idempotency-key";
+        var amount = BigDecimal.valueOf(30.00);
+
+        var sourceAppUser = appUserRepository.saveAndFlush(
+                createAppUser("test123@example.com")
+        );
+
+        var destinationAppUser = appUserRepository.saveAndFlush(
+                createAppUser("test132@example.com")
+        );
+
+        var walletSource = Wallet.create(sourceAppUser);
+        walletSource.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(walletSource);
+
+        var walletDestination = walletRepository.saveAndFlush(
+                Wallet.create(destinationAppUser)
+        );
+
+        CountDownLatch readyLatch = new CountDownLatch(2);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        TransactionDto.Response firstResponse;
+        TransactionDto.Response secondResponse;
+
+        try {
+            var firstFuture = executor.submit(() -> {
+                readyLatch.countDown();
+                startLatch.await();
+
+                return transactionService.createTransfer(
+                        walletSource.getId(),
+                        walletDestination.getId(),
+                        amount,
+                        idempotencyKey
+                );
+            });
+
+            var secondFuture = executor.submit(() -> {
+                readyLatch.countDown();
+                startLatch.await();
+
+                return transactionService.createTransfer(
+                        walletSource.getId(),
+                        walletDestination.getId(),
+                        amount,
+                        idempotencyKey
+                );
+            });
+
+            readyLatch.await();
+            startLatch.countDown();
+
+            firstResponse = firstFuture.get();
+            secondResponse = secondFuture.get();
+
+        } finally {
+            executor.shutdown();
+        }
+
+        Assertions.assertEquals(
+                firstResponse.id(),
+                secondResponse.id()
+        );
+
+        Assertions.assertEquals(
+                1,
+                transactionRepository.count()
+        );
+
+        var sourceWalletUpdated = walletRepository
+                .findById(walletSource.getId())
+                .orElseThrow();
+
+        var destinationWalletUpdated = walletRepository
+                .findById(walletDestination.getId())
+                .orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(70.00)
+                        .compareTo(sourceWalletUpdated.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(30.00)
+                        .compareTo(destinationWalletUpdated.getBalance())
+        );
     }
 
 
