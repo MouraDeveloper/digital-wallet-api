@@ -336,6 +336,55 @@ public class TransactionServiceIntegrationTest {
         );
     }
 
+    @Test
+    void shouldReturnSameTransactionWhenIdempotencyKeyIsRepeated() {
+        var idempotencyKey = "unique-idempotency-key";
+        var amount = BigDecimal.valueOf(30.00);
+
+        var appUserSource = appUserRepository.saveAndFlush(
+                createAppUser("test-source@example.com")
+        );
+        var appUserDestination = appUserRepository.saveAndFlush(
+                createAppUser("test-destination@example.com")
+        );
+
+        var walletSource = Wallet.create(appUserSource);
+        walletSource.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(walletSource);
+        var walletDestination = walletRepository.saveAndFlush(Wallet.create(appUserDestination));
+
+        var firstResponse = transactionService.createTransfer(
+                walletSource.getId(),
+                walletDestination.getId(),
+                amount,
+                idempotencyKey
+        );
+
+        var secondResponse = transactionService.createTransfer(
+                walletSource.getId(),
+                walletDestination.getId(),
+                amount,
+                idempotencyKey
+        );
+
+
+        Assertions.assertEquals(firstResponse.id(), secondResponse.id());
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var walletSourceUpdated = walletRepository.findById(walletSource.getId()).orElseThrow();
+        var walletDestinationUpdated = walletRepository.findById(walletDestination.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(70.00).compareTo(walletSourceUpdated.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                amount.compareTo(walletDestinationUpdated.getBalance())
+        );
+    }
+
 
     private AppUser createAppUser(String email) {
         return AppUser.create("test user", email, "hashedPassword");
