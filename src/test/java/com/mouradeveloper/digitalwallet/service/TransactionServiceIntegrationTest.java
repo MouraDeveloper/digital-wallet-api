@@ -2,6 +2,7 @@ package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
+import com.mouradeveloper.digitalwallet.exception.conflict.IdempotencyConflictException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
@@ -382,6 +383,52 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertEquals(
                 0,
                 amount.compareTo(walletDestinationUpdated.getBalance())
+        );
+    }
+
+    @Test
+    @Transactional
+    void shouldThrowConflictWhenIdempotencyKeyIsReusedWithDifferentPayload() {
+        var idempotencyKey = "conflict-idempotency-key";
+
+        var sourceAppUser = appUserRepository.saveAndFlush(
+                createAppUser("test123@example.com")
+        );
+        var destinationAppUser = appUserRepository.saveAndFlush(
+                createAppUser("test132@example.com")
+        );
+
+        var walletSource = Wallet.create(sourceAppUser);
+        walletSource.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(walletSource);
+        var walletDestination = walletRepository.saveAndFlush(Wallet.create(destinationAppUser));
+
+        transactionService.createTransfer(
+                walletSource.getId(),
+                walletDestination.getId(),
+                BigDecimal.valueOf(30.00),
+                idempotencyKey
+        );
+
+        Assertions.assertThrows(
+                IdempotencyConflictException.class, () -> transactionService.createTransfer(
+                        walletSource.getId(),
+                        walletDestination.getId(),
+                        BigDecimal.valueOf(40.00),
+                        idempotencyKey
+                )
+        );
+
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(70.00).compareTo(walletSource.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(30.00).compareTo(walletDestination.getBalance())
         );
     }
 
