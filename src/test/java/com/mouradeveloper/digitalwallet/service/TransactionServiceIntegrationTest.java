@@ -436,6 +436,17 @@ public class TransactionServiceIntegrationTest {
     @Test
     @Transactional
     void shouldThrowWhenIdempotencyKeyIsBlank() {
+        assertInvalidIdempotencyKey(" ");
+    }
+
+    @Test
+    @Transactional
+    void shouldThrowWhenIdempotencyKeyIsNull() {
+        assertInvalidIdempotencyKey(null);
+    }
+
+
+    private void assertInvalidIdempotencyKey(String idempotencyKey) {
         var sourceAppUser = appUserRepository.saveAndFlush(
                 createAppUser("test123@example.com")
         );
@@ -453,7 +464,7 @@ public class TransactionServiceIntegrationTest {
                         walletSource.getId(),
                         walletDestination.getId(),
                         BigDecimal.valueOf(30.00),
-                        " "
+                        idempotencyKey
                 )
         );
 
