@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.service;
 
+import com.mouradeveloper.digitalwallet.exception.badRequest.InvalidIdempotencyKeyException;
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.exception.conflict.IdempotencyConflictException;
@@ -429,6 +430,41 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertEquals(
                 0,
                 BigDecimal.valueOf(30.00).compareTo(walletDestination.getBalance())
+        );
+    }
+
+    @Test
+    @Transactional
+    void shouldThrowWhenIdempotencyKeyIsBlank() {
+        var sourceAppUser = appUserRepository.saveAndFlush(
+                createAppUser("test123@example.com")
+        );
+        var destinationAppUser = appUserRepository.saveAndFlush(
+                createAppUser("test321@example.com")
+        );
+
+        var walletSource = Wallet.create(sourceAppUser);
+        walletSource.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(walletSource);
+        var walletDestination = walletRepository.saveAndFlush(Wallet.create(destinationAppUser));
+
+        Assertions.assertThrows(
+                InvalidIdempotencyKeyException.class, () -> transactionService.createTransfer(
+                        walletSource.getId(),
+                        walletDestination.getId(),
+                        BigDecimal.valueOf(30.00),
+                        " "
+                )
+        );
+
+        Assertions.assertEquals(0, transactionRepository.count());
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(walletDestination.getBalance())
+        );
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100.00).compareTo(walletSource.getBalance())
         );
     }
 
