@@ -87,6 +87,7 @@ public class TransactionControllerIntegrationTest {
         var json = objectMapper.writeValueAsString(transferRequest);
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isCreated())
@@ -251,6 +252,7 @@ public class TransactionControllerIntegrationTest {
         var json = objectMapper.writeValueAsString(transferRequest);
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Idempotency-Key", "test-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isUnprocessableContent())
