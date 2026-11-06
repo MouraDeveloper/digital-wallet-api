@@ -7,6 +7,7 @@ import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
+import com.mouradeveloper.digitalwallet.service.TransactionService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,8 @@ public class TransactionControllerIntegrationTest {
             .withDatabaseName("testdb")
             .withUsername("testuser")
             .withPassword("testpass");
+    @Autowired
+    private TransactionService transactionService;
 
     @DynamicPropertySource
     static void configureProperties(org.springframework.test.context.DynamicPropertyRegistry registry) {
@@ -272,6 +275,68 @@ public class TransactionControllerIntegrationTest {
         Assertions.assertEquals(
                 0,
                 BigDecimal.ZERO.compareTo(savedDestinationWallet.getBalance())
+        );
+    }
+
+    @Test
+    void shouldReturnSameTransactionWhenIdempotencyKeyIsRepeated() throws Exception {
+        var idempotencyKey = "test-idempotency-key";
+
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("test123@example.com"));
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("test454@example.com"));
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100));
+        walletRepository.saveAndFlush(sourceWallet);
+        var destinationWallet = walletRepository.saveAndFlush(Wallet.create(destinationUser));
+
+        var transferRequest = new TransactionDto.TransferRequest(
+                sourceWallet.getId(),
+                destinationWallet.getId(),
+                BigDecimal.valueOf(50)
+        );
+
+        var json = objectMapper.writeValueAsString(transferRequest);
+
+        var mockPrimary = mockMvc.perform(post("/transactions/create-transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json)
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists());
+
+        var mockSec = mockMvc.perform(post("/transactions/create-transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Idempotency-Key", idempotencyKey)
+                        .content(json))
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(status().isCreated());
+
+        String mockBodyPrimary = mockPrimary.andReturn().getResponse().getContentAsString();
+        String mockBodySec = mockSec.andReturn().getResponse().getContentAsString();
+
+        var firstResponse = objectMapper.readValue(mockBodyPrimary, TransactionDto.Response.class);
+        var secondResponse = objectMapper.readValue(mockBodySec, TransactionDto.Response.class);
+
+        Assertions.assertEquals(
+                firstResponse.id(),
+                secondResponse.id()
+        );
+
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var walletSource = walletRepository.findById(sourceWallet.getId()).orElseThrow();
+        var walletDestination = walletRepository.findById(destinationWallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0, BigDecimal.valueOf(50).compareTo(walletSource.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0, BigDecimal.valueOf(50).compareTo(walletDestination.getBalance())
         );
     }
 
