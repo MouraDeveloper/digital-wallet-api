@@ -483,6 +483,63 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    void shouldReturnBadRequestWhenIdempotencyKeyHeaderIsMissing() throws Exception {
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("missing-key-source@example.com")
+        );
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("missing-key-destination@example.com")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100));
+        walletRepository.saveAndFlush(sourceWallet);
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        var transferRequest = new TransactionDto.TransferRequest(
+                sourceWallet.getId(),
+                destinationWallet.getId(),
+                BigDecimal.valueOf(30)
+        );
+
+        var json = objectMapper.writeValueAsString(transferRequest);
+
+        mockMvc.perform(post("/transactions/create-transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest());
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
+        );
+
+        var updatedSourceWallet = walletRepository
+                .findById(sourceWallet.getId())
+                .orElseThrow();
+
+        var updatedDestinationWallet = walletRepository
+                .findById(destinationWallet.getId())
+                .orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100)
+                        .compareTo(updatedSourceWallet.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO
+                        .compareTo(updatedDestinationWallet.getBalance())
+        );
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
