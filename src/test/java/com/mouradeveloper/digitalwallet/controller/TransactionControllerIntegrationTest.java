@@ -340,6 +340,84 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    void shouldReturnConflictWhenIdempotencyKeyIsReusedWithDifferentPayload() throws Exception {
+        var idempotencyKey = "test-idempotency-key";
+
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("test123@example.com")
+        );
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("test454@example.com")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100));
+        walletRepository.saveAndFlush(sourceWallet);
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        var transferRequestOne = new TransactionDto.TransferRequest(
+                sourceWallet.getId(),
+                destinationWallet.getId(),
+                BigDecimal.valueOf(50)
+        );
+
+        var transferRequestSec = new TransactionDto.TransferRequest(
+                sourceWallet.getId(),
+                destinationWallet.getId(),
+                BigDecimal.valueOf(60)
+        );
+
+        var json = objectMapper.writeValueAsString(transferRequestOne);
+        var jsonSec = objectMapper.writeValueAsString(transferRequestSec);
+
+        mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .content(json)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Idempotency-Key", idempotencyKey)
+                        .content(jsonSec)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message")
+                        .value("Idempotency key already used with different request data."))
+                .andExpect(jsonPath("$.path")
+                        .value("/transactions/create-transfer"))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        Assertions.assertEquals(
+                1,
+                transactionRepository.count()
+        );
+
+        var walletSource = walletRepository
+                .findById(sourceWallet.getId())
+                .orElseThrow();
+
+        var walletDestination = walletRepository
+                .findById(destinationWallet.getId())
+                .orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(50).compareTo(walletSource.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(50).compareTo(walletDestination.getBalance())
+        );
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
