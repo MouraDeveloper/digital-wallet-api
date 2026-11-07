@@ -47,4 +47,15 @@ public class TransactionController {
     ) {
         return ResponseEntity.ok(transactionService.findByWalletId(walletId));
     }
+
+    @PostMapping("/create-deposit")
+    public ResponseEntity<TransactionDto.Response> createDeposit(
+            @RequestBody @Valid TransactionDto.DepositRequest depositRequest
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(transactionService.createDeposit(
+                        depositRequest.destinationWalletId(),
+                        depositRequest.amount()
+                ));
+    }
 }
