@@ -7,7 +7,6 @@ import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
-import com.mouradeveloper.digitalwallet.service.TransactionService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,8 +39,6 @@ public class TransactionControllerIntegrationTest {
             .withDatabaseName("testdb")
             .withUsername("testuser")
             .withPassword("testpass");
-    @Autowired
-    private TransactionService transactionService;
 
     @DynamicPropertySource
     static void configureProperties(org.springframework.test.context.DynamicPropertyRegistry registry) {

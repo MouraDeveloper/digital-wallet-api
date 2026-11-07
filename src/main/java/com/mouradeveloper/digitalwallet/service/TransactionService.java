@@ -109,6 +109,18 @@ public class TransactionService {
                 .toList();
     }
 
+    @Transactional
+    public TransactionDto.Response createDeposit(UUID destinationWalletId, BigDecimal amount) {
+        var destinationWallet = findWalletForUpdateOrThrow(destinationWalletId);
+        var transaction = Transaction.deposit(destinationWallet, amount);
+        destinationWallet.deposit(amount);
+
+        var transactionSaved = transactionRepository.save(transaction);
+
+        return transactionMapper.toResponse(transactionSaved);
+    }
+
+
 
     private Wallet findWalletOrThrow(UUID walletId) {
         return walletRepository.findById(walletId)
