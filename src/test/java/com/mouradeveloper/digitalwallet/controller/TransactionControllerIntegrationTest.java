@@ -418,6 +418,71 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    void shouldReturnBadRequestWhenIdempotencyKeyIsBlank() throws Exception {
+        var sourceUser = appUserRepository.saveAndFlush(
+                createUser("blank-key-source@example.com")
+        );
+
+        var destinationUser = appUserRepository.saveAndFlush(
+                createUser("blank-key-destination@example.com")
+        );
+
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100));
+        walletRepository.saveAndFlush(sourceWallet);
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        var transferRequest = new TransactionDto.TransferRequest(
+                sourceWallet.getId(),
+                destinationWallet.getId(),
+                BigDecimal.valueOf(30)
+        );
+
+        var json = objectMapper.writeValueAsString(transferRequest);
+
+        mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Idempotency-Key", " ")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"))
+                .andExpect(jsonPath("$.message")
+                        .value("Idempotency key must not be blank or null"))
+                .andExpect(jsonPath("$.path")
+                        .value("/transactions/create-transfer"))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
+        );
+
+        var updatedSourceWallet = walletRepository
+                .findById(sourceWallet.getId())
+                .orElseThrow();
+
+        var updatedDestinationWallet = walletRepository
+                .findById(destinationWallet.getId())
+                .orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100)
+                        .compareTo(updatedSourceWallet.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO
+                        .compareTo(updatedDestinationWallet.getBalance())
+        );
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
