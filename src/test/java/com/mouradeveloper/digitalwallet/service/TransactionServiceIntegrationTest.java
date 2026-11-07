@@ -540,6 +540,52 @@ public class TransactionServiceIntegrationTest {
         );
     }
 
+    @Test
+    @Transactional
+    void shouldCreateDepositAndUpdateWalletBalance() {
+        var appUser = appUserRepository.saveAndFlush(
+                createAppUser("teste123@gmail.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+
+        var transaction = transactionService.createDeposit(
+                wallet.getId(),
+                BigDecimal.valueOf(100.00)
+        );
+
+        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                TypeEnum.DEPOSIT,
+                transaction.type()
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100.00)
+                        .compareTo(walletUpdated.getBalance())
+        );
+
+        Assertions.assertEquals(
+                1,
+                transactionRepository.count()
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100.00)
+                        .compareTo(transaction.amount())
+        );
+
+        Assertions.assertEquals(
+                walletUpdated.getId(),
+                transaction.destinationWalletId()
+        );
+
+        Assertions.assertNull(transaction.sourceWalletId());
+    }
+
 
     private void assertInvalidIdempotencyKey(String idempotencyKey) {
         var sourceAppUser = appUserRepository.saveAndFlush(
@@ -568,6 +614,7 @@ public class TransactionServiceIntegrationTest {
                 0,
                 BigDecimal.ZERO.compareTo(walletDestination.getBalance())
         );
+
         Assertions.assertEquals(
                 0,
                 BigDecimal.valueOf(100.00).compareTo(walletSource.getBalance())
