@@ -2,6 +2,7 @@ package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.badRequest.InvalidIdempotencyKeyException;
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
+import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.exception.conflict.IdempotencyConflictException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
@@ -587,6 +588,7 @@ public class TransactionServiceIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldThrowWhenDepositDestinationWalletDoesNotExist() {
         var uuid = UUID.randomUUID();
 
@@ -601,6 +603,36 @@ public class TransactionServiceIntegrationTest {
                 0,
                 transactionRepository.count()
         );
+    }
+
+    @Test
+    @Transactional
+    void shouldThrowWhenDepositAmountIsZero() {
+        var appUser = appUserRepository.saveAndFlush(
+                createAppUser("test123@example.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+
+        Assertions.assertThrows(
+                InvalidAmountException.class, () -> transactionService.createDeposit(
+                        wallet.getId(),
+                        BigDecimal.ZERO
+                )
+        );
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
+        );
+
+        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(walletUpdated.getBalance())
+        );
+
     }
 
 
