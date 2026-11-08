@@ -573,6 +573,7 @@ public class TransactionControllerIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldReturnNotFoundWhenDepositDestinationWalletDoesNotExist() throws Exception {
         var depositRequest = new TransactionDto.DepositRequest(
                 UUID.randomUUID(),
@@ -597,12 +598,41 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    @Transactional
+    void shouldReturnBadRequestWhenDepositAmountIsZero() throws Exception {
+        var appUser = appUserRepository.saveAndFlush(createUser("test123@example.com"));
 
-        private AppUser createUser (String email){
-            return AppUser.create(
-                    "test",
-                    email,
-                    "password123"
-            );
-        }
+        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+
+        var json = objectMapper.writeValueAsString(new TransactionDto.DepositRequest(wallet.getId(), BigDecimal.ZERO));
+
+        mockMvc.perform(post("/transactions/create-deposit")
+                .content(json)
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"));
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
+        );
+
+        var walletAfterDepositAttempt = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(walletAfterDepositAttempt.getBalance())
+        );
+    }
+
+
+    private AppUser createUser(String email) {
+        return AppUser.create(
+                "test",
+                email,
+                "password123"
+        );
+    }
 }
