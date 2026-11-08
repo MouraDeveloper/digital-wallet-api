@@ -586,6 +586,23 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertNull(transaction.sourceWalletId());
     }
 
+    @Test
+    void shouldThrowWhenDepositDestinationWalletDoesNotExist() {
+        var uuid = UUID.randomUUID();
+
+        Assertions.assertThrows(
+                WalletNotFoundException.class, () -> transactionService.createDeposit(
+                        uuid,
+                        BigDecimal.valueOf(100.00)
+                )
+        );
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
+        );
+    }
+
 
     private void assertInvalidIdempotencyKey(String idempotencyKey) {
         var sourceAppUser = appUserRepository.saveAndFlush(
