@@ -627,6 +627,34 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    @Transactional
+    void shouldReturnBadRequestWhenDepositAmountIsNegative() throws Exception {
+        var appUser = appUserRepository.saveAndFlush(createUser("test123@example.com"));
+        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+
+        var json = objectMapper.writeValueAsString(new TransactionDto.DepositRequest(wallet.getId(), BigDecimal.valueOf(-50)));
+
+        mockMvc.perform(post("/transactions/create-deposit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.error").value("Bad Request"));
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
+        );
+
+        var walletAfterDepositAttempt = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(walletAfterDepositAttempt.getBalance())
+        );
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
