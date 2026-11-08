@@ -537,6 +537,40 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    @Transactional
+    void shouldCreateDepositAndReturnCreated() throws Exception {
+        var appUser = appUserRepository.saveAndFlush(createUser("test123@example.com"));
+        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+
+        var depositRequest = new TransactionDto.DepositRequest(
+                wallet.getId(),
+                BigDecimal.valueOf(200)
+        );
+
+        var json = objectMapper.writeValueAsString(depositRequest);
+
+        mockMvc.perform(post("/transactions/create-deposit")
+                        .content(json)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists())
+                .andExpect(jsonPath("$.type").value("DEPOSIT"))
+                .andExpect(jsonPath("$.destinationWalletId").value(wallet.getId().toString()))
+                .andExpect(jsonPath("$.amount").value(200))
+                .andExpect(jsonPath("$.sourceWalletId").isEmpty())
+                .andExpect(jsonPath("$.createdAt").exists());
+
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var walletAfterDeposit = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(200).compareTo(walletAfterDeposit.getBalance())
+        );
+    }
+
 
     private AppUser createUser(String email) {
         return AppUser.create(
