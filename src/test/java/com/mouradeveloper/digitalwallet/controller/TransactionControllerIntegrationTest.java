@@ -23,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -571,13 +572,37 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    @Test
+    void shouldReturnNotFoundWhenDepositDestinationWalletDoesNotExist() throws Exception {
+        var depositRequest = new TransactionDto.DepositRequest(
+                UUID.randomUUID(),
+                BigDecimal.valueOf(100)
+        );
 
-    private AppUser createUser(String email) {
-        return AppUser.create(
-                "test",
-                email,
-                "password123"
+        var json = objectMapper.writeValueAsString(depositRequest);
+
+        mockMvc.perform(post("/transactions/create-deposit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.message").value("Wallet with ID " + depositRequest.destinationWalletId() + " not found."))
+                .andExpect(jsonPath("$.path").value("/transactions/create-deposit"))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+        Assertions.assertEquals(
+                0,
+                transactionRepository.count()
         );
     }
 
+
+        private AppUser createUser (String email){
+            return AppUser.create(
+                    "test",
+                    email,
+                    "password123"
+            );
+        }
 }
