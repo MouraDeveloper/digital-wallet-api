@@ -100,7 +100,8 @@ public class Transaction {
 
     public static Transaction deposit(
             Wallet destination,
-            BigDecimal amount
+            BigDecimal amount,
+            String idempotencyKey
     ) {
         validateAmount(amount);
 
@@ -113,7 +114,7 @@ public class Transaction {
                 null,
                 destination,
                 amount,
-                null
+                idempotencyKey
         );
     }
 

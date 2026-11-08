@@ -50,12 +50,14 @@ public class TransactionController {
 
     @PostMapping("/create-deposit")
     public ResponseEntity<TransactionDto.Response> createDeposit(
-            @RequestBody @Valid TransactionDto.DepositRequest depositRequest
+            @RequestBody @Valid TransactionDto.DepositRequest depositRequest,
+            @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(transactionService.createDeposit(
                         depositRequest.destinationWalletId(),
-                        depositRequest.amount()
+                        depositRequest.amount(),
+                        idempotencyKey
                 ));
     }
 }

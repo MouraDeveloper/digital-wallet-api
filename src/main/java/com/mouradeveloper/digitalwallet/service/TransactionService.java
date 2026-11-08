@@ -9,6 +9,7 @@ import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
 import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
+import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
 import lombok.RequiredArgsConstructor;
@@ -44,7 +45,7 @@ public class TransactionService {
                 transactionRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existingTransaction.isPresent()) {
-            return validateExistingTransaction(
+            return validateExistingTransfer(
                     existingTransaction.get(),
                     sourceWalletId,
                     destinationWalletId,
@@ -71,7 +72,7 @@ public class TransactionService {
                 transactionRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existingTransactionAfterLock.isPresent()) {
-            return validateExistingTransaction(
+            return validateExistingTransfer(
                     existingTransactionAfterLock.get(),
                     sourceWalletId,
                     destinationWalletId,
@@ -110,16 +111,41 @@ public class TransactionService {
     }
 
     @Transactional
-    public TransactionDto.Response createDeposit(UUID destinationWalletId, BigDecimal amount) {
+    public TransactionDto.Response createDeposit(UUID destinationWalletId, BigDecimal amount, String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new InvalidIdempotencyKeyException();
+        }
+
+        var existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingTransaction.isPresent()) {
+            return validateExistingDeposit(
+                    existingTransaction.get(),
+                    destinationWalletId,
+                    amount
+            );
+        }
+
         var destinationWallet = findWalletForUpdateOrThrow(destinationWalletId);
-        var transaction = Transaction.deposit(destinationWallet, amount);
+
+        var existingTransactionAfterLock =
+                transactionRepository.findByIdempotencyKey(idempotencyKey);
+
+        if (existingTransactionAfterLock.isPresent()) {
+            return validateExistingDeposit(
+                    existingTransactionAfterLock.get(),
+                    destinationWalletId,
+                    amount
+            );
+        }
+
+        var transaction = Transaction.deposit(destinationWallet, amount, idempotencyKey);
         destinationWallet.deposit(amount);
 
         var transactionSaved = transactionRepository.save(transaction);
 
         return transactionMapper.toResponse(transactionSaved);
     }
-
 
 
     private Wallet findWalletOrThrow(UUID walletId) {
@@ -143,12 +169,42 @@ public class TransactionService {
                 );
     }
 
-    private TransactionDto.Response validateExistingTransaction(
+
+    private TransactionDto.Response validateExistingDeposit(
+            Transaction existingTransaction,
+            UUID destinationWalletId,
+            BigDecimal amount
+    ) {
+        boolean sameType =
+                existingTransaction.getType() == TypeEnum.DEPOSIT;
+
+        boolean sameDestination =
+                existingTransaction.getDestinationWallet()
+                        .getId()
+                        .equals(destinationWalletId);
+
+        boolean sameAmount =
+                existingTransaction.getAmount()
+                        .compareTo(amount) == 0;
+
+        if (!sameType || !sameDestination || !sameAmount) {
+            throw new IdempotencyConflictException();
+        }
+
+        return transactionMapper.toResponse(existingTransaction);
+    }
+
+
+    private TransactionDto.Response validateExistingTransfer(
             Transaction existingTransaction,
             UUID sourceWalletId,
             UUID destinationWalletId,
             BigDecimal amount
     ) {
+        if (existingTransaction.getType() != TypeEnum.TRANSFER) {
+            throw new IdempotencyConflictException();
+        }
+
         boolean sameSource =
                 existingTransaction.getSourceWallet()
                         .getId()
