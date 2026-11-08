@@ -608,6 +608,17 @@ public class TransactionServiceIntegrationTest {
     @Test
     @Transactional
     void shouldThrowWhenDepositAmountIsZero() {
+        assertInvalidDepositAmount(BigDecimal.ZERO);
+    }
+
+    @Test
+    @Transactional
+    void shouldThrowWhenDepositAmountIsNegative() {
+        assertInvalidDepositAmount(BigDecimal.valueOf(-50.00));
+    }
+
+
+    private void assertInvalidDepositAmount(BigDecimal amount) {
         var appUser = appUserRepository.saveAndFlush(
                 createAppUser("test123@example.com")
         );
@@ -617,7 +628,7 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertThrows(
                 InvalidAmountException.class, () -> transactionService.createDeposit(
                         wallet.getId(),
-                        BigDecimal.ZERO
+                        amount
                 )
         );
 
@@ -632,9 +643,7 @@ public class TransactionServiceIntegrationTest {
                 0,
                 BigDecimal.ZERO.compareTo(walletUpdated.getBalance())
         );
-
     }
-
 
     private void assertInvalidIdempotencyKey(String idempotencyKey) {
         var sourceAppUser = appUserRepository.saveAndFlush(
