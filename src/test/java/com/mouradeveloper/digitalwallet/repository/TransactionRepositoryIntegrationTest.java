@@ -157,7 +157,7 @@ public class TransactionRepositoryIntegrationTest {
         var wallet = Wallet.create(appUser);
         walletRepository.save(wallet);
 
-        var transaction = Transaction.deposit(wallet, BigDecimal.valueOf(100.00));
+        var transaction = Transaction.deposit(wallet, BigDecimal.valueOf(100.00), "test-idempotency-key");
         transactionRepository.save(transaction);
         var transactionFound = transactionRepository.findById(transaction.getId());
 

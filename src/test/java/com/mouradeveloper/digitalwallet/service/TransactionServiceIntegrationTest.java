@@ -552,7 +552,8 @@ public class TransactionServiceIntegrationTest {
 
         var transaction = transactionService.createDeposit(
                 wallet.getId(),
-                BigDecimal.valueOf(100.00)
+                BigDecimal.valueOf(100.00),
+                "deposit-idempotency-key"
         );
 
         var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
@@ -595,7 +596,8 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertThrows(
                 WalletNotFoundException.class, () -> transactionService.createDeposit(
                         uuid,
-                        BigDecimal.valueOf(100.00)
+                        BigDecimal.valueOf(100.00),
+                        "deposit-idempotency-key"
                 )
         );
 
@@ -628,7 +630,8 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertThrows(
                 InvalidAmountException.class, () -> transactionService.createDeposit(
                         wallet.getId(),
-                        amount
+                        amount,
+                        "deposit-idempotency-key"
                 )
         );
 

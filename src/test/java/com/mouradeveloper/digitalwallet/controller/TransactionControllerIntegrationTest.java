@@ -277,6 +277,7 @@ public class TransactionControllerIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldReturnSameTransactionWhenIdempotencyKeyIsRepeated() throws Exception {
         var idempotencyKey = "test-idempotency-key";
 
@@ -339,6 +340,7 @@ public class TransactionControllerIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldReturnConflictWhenIdempotencyKeyIsReusedWithDifferentPayload() throws Exception {
         var idempotencyKey = "test-idempotency-key";
 
@@ -417,6 +419,7 @@ public class TransactionControllerIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldReturnBadRequestWhenIdempotencyKeyIsBlank() throws Exception {
         var sourceUser = appUserRepository.saveAndFlush(
                 createUser("blank-key-source@example.com")
@@ -482,6 +485,7 @@ public class TransactionControllerIntegrationTest {
     }
 
     @Test
+    @Transactional
     void shouldReturnBadRequestWhenIdempotencyKeyHeaderIsMissing() throws Exception {
         var sourceUser = appUserRepository.saveAndFlush(
                 createUser("missing-key-source@example.com")
@@ -552,6 +556,7 @@ public class TransactionControllerIntegrationTest {
         var json = objectMapper.writeValueAsString(depositRequest);
 
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Idempotency-Key", "deposit-idempotency-key")
                         .content(json)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
@@ -584,6 +589,7 @@ public class TransactionControllerIntegrationTest {
 
         mockMvc.perform(post("/transactions/create-deposit")
                         .contentType(MediaType.APPLICATION_JSON)
+                        .header("Idempotency-Key", "deposit-idempotency-key")
                         .content(json))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
@@ -608,8 +614,9 @@ public class TransactionControllerIntegrationTest {
         var json = objectMapper.writeValueAsString(new TransactionDto.DepositRequest(wallet.getId(), BigDecimal.ZERO));
 
         mockMvc.perform(post("/transactions/create-deposit")
-                .content(json)
-                .contentType(MediaType.APPLICATION_JSON))
+                        .content(json)
+                        .header("Idempotency-Key", "deposit-idempotency-key")
+                        .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
@@ -636,8 +643,9 @@ public class TransactionControllerIntegrationTest {
         var json = objectMapper.writeValueAsString(new TransactionDto.DepositRequest(wallet.getId(), BigDecimal.valueOf(-50)));
 
         mockMvc.perform(post("/transactions/create-deposit")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(json))
+                        .header("Idempotency-Key", "deposit-idempotency-key")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));

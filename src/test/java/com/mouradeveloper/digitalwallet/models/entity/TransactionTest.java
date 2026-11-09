@@ -17,7 +17,7 @@ public class TransactionTest {
         var wallet = createWallet(appUser);
         var amount = BigDecimal.valueOf(100.00);
 
-        var transaction = Transaction.deposit(wallet, amount);
+        var transaction = Transaction.deposit(wallet, amount, "test-idempotency-key");
 
         Assertions.assertEquals(TypeEnum.DEPOSIT, transaction.getType());
 
@@ -26,6 +26,11 @@ public class TransactionTest {
         Assertions.assertNull(transaction.getSourceWallet());
 
         Assertions.assertEquals(amount, transaction.getAmount());
+
+        Assertions.assertEquals(
+                "test-idempotency-key",
+                transaction.getIdempotencyKey()
+        );
     }
 
     @Test
@@ -33,7 +38,7 @@ public class TransactionTest {
         Wallet walletDestination = null;
 
         Assertions.assertThrows(
-                BusinessRuleException.class, () -> Transaction.deposit(walletDestination, BigDecimal.valueOf(100.00))
+                BusinessRuleException.class, () -> Transaction.deposit(walletDestination, BigDecimal.valueOf(100.00), "test-idempotency-key")
         );
     }
 
@@ -43,7 +48,7 @@ public class TransactionTest {
         BigDecimal amount = null;
 
         Assertions.assertThrows(
-                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount)
+                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount, "test-idempotency-key")
         );
     }
 
@@ -53,7 +58,7 @@ public class TransactionTest {
         BigDecimal amount = BigDecimal.ZERO;
 
         Assertions.assertThrows(
-                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount)
+                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount, "test-idempotency-key")
         );
     }
 
@@ -63,7 +68,7 @@ public class TransactionTest {
         BigDecimal amount = BigDecimal.valueOf(-100.00);
 
         Assertions.assertThrows(
-                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount)
+                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount, "test-idempotency-key")
         );
     }
 
@@ -73,7 +78,7 @@ public class TransactionTest {
         BigDecimal amount = BigDecimal.valueOf(100.003);
 
         Assertions.assertThrows(
-                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount)
+                InvalidAmountException.class, () -> Transaction.deposit(walletDestination, amount, "test-idempotency-key")
         );
     }
 
@@ -91,6 +96,11 @@ public class TransactionTest {
         Assertions.assertEquals(walletSource, transaction.getSourceWallet());
         Assertions.assertEquals(walletDestination, transaction.getDestinationWallet());
         Assertions.assertEquals(amount, transaction.getAmount());
+
+        Assertions.assertEquals(
+                "test-idempotency-key",
+                transaction.getIdempotencyKey()
+        );
     }
 
     @Test

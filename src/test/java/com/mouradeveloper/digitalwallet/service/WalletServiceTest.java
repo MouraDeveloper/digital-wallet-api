@@ -1,22 +1,13 @@
 package com.mouradeveloper.digitalwallet.service;
 
-import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
-import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
-import com.mouradeveloper.digitalwallet.mapper.WalletMapper;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
-import com.mouradeveloper.digitalwallet.models.entity.Transaction;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
-import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,63 +16,6 @@ public class WalletServiceTest {
 
     @Mock
     private WalletRepository walletRepository;
-
-    @Mock
-    private WalletMapper walletMapper;
-
-    @Mock
-    private TransactionRepository transactionRepository;
-
-    @InjectMocks
-    private WalletService walletService;
-
-
-    @Test
-    void shouldDepositAmountIntoWallet() {
-        UUID walletId = UUID.randomUUID();
-        BigDecimal amount = new BigDecimal("100.00");
-
-        var appUser = createAppUser();
-        var wallet = createWallet(appUser);
-
-        mockWalletRepository(walletId, wallet);
-
-        walletService.deposit(walletId, amount);
-
-        Assertions.assertEquals(amount, wallet.getBalance());
-
-        Mockito.verify(transactionRepository)
-                .save(Mockito.any(Transaction.class));
-    }
-
-    @Test
-    void shouldThrowWalletNotFoundExceptionWhenDepositingIntoNonexistentWallet() {
-        var walletId = UUID.randomUUID();
-        var amount = BigDecimal.valueOf(100.00);
-
-        mockWalletRepositoryNotFound(walletId);
-
-        Assertions.assertThrows(WalletNotFoundException.class, () -> walletService.deposit(walletId, amount));
-
-        Mockito.verify(transactionRepository, Mockito.never())
-                .save(Mockito.any(Transaction.class));
-    }
-
-    @Test
-    void shouldThrowInvalidAmountExceptionWhenDepositAmountIsNegative() {
-        var walletId = UUID.randomUUID();
-        var amount = BigDecimal.valueOf(-1.00);
-
-        var appUser = createAppUser();
-        var wallet = createWallet(appUser);
-
-        mockWalletRepository(walletId, wallet);
-
-        Assertions.assertThrows(InvalidAmountException.class, () -> walletService.deposit(walletId, amount));
-
-        Mockito.verify(transactionRepository, Mockito.never())
-                .save(Mockito.any(Transaction.class));
-    }
 
 
     private static AppUser createAppUser() {

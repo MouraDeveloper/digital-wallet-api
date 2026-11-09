@@ -55,8 +55,8 @@ public class TransactionServiceTest {
         var walletSource = createWallet(user1);
         var walletDestination = createWallet(user2);
 
-        mockWalletSource(walletSourceId, walletSource);
-        mockWalletDestination(walletDestinationId, walletDestination);
+        mockWalletForUpdate(walletSourceId, walletSource);
+        mockWalletForUpdate(walletDestinationId, walletDestination);
 
         walletSource.deposit(BigDecimal.valueOf(500.00));
 
@@ -83,8 +83,8 @@ public class TransactionServiceTest {
 
         walletSource.deposit(BigDecimal.valueOf(100.00));
 
-        mockWalletSource(walletSourceId, walletSource);
-        mockWalletDestination(walletDestinationId, walletDestination);
+        mockWalletForUpdate(walletSourceId, walletSource);
+        mockWalletForUpdate(walletDestinationId, walletDestination);
 
         Assertions.assertThrows(InsufficientFundsException.class, () -> transactionService.createTransfer(
                 walletSourceId, walletDestinationId, amount, "test-idempotency-key")
@@ -119,10 +119,10 @@ public class TransactionServiceTest {
 
     @Test
     void shouldThrowWalletNotFoundExceptionWhenSourceWalletDoesNotExist() {
-        var sourceWalletId = UUID.randomUUID();
-        var destinationWalletId = UUID.randomUUID();
+        var sourceWalletId = new UUID(0L, 1L);
+        var destinationWalletId = new UUID(0L, 2L);
 
-        mockWalletNotFound(sourceWalletId);
+        mockWalletForUpdateNotFound(sourceWalletId);
         Assertions.assertThrows(WalletNotFoundException.class, () -> transactionService.createTransfer(
                 sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00), "test-idempotency-key")
         );
@@ -133,11 +133,11 @@ public class TransactionServiceTest {
 
     @Test
     void shouldThrowWalletNotFoundExceptionWhenDestinationWalletDoesNotExist() {
-        var sourceWalletId = UUID.randomUUID();
-        var destinationWalletId = UUID.randomUUID();
+        var sourceWalletId = new UUID(0L, 1L);
+        var destinationWalletId = new UUID(0L, 2L);
 
-        mockWalletSource(sourceWalletId, createWallet(createAppUser()));
-        mockWalletNotFound(destinationWalletId);
+        mockWalletForUpdate(sourceWalletId, createWallet(createAppUser()));
+        mockWalletForUpdateNotFound(destinationWalletId);
 
         Assertions.assertThrows(WalletNotFoundException.class, () -> transactionService.createTransfer(
                 sourceWalletId, destinationWalletId, BigDecimal.valueOf(100.00), "test-idempotency-key"
@@ -157,8 +157,8 @@ public class TransactionServiceTest {
         var walletSource = createWallet(createAppUser());
         var walletDestination = createWallet(createAppUser());
 
-        mockWalletSource(sourceWalletId, walletSource);
-        mockWalletDestination(destinationWalletId, walletDestination);
+        mockWalletForUpdate(sourceWalletId, walletSource);
+        mockWalletForUpdate(destinationWalletId, walletDestination);
 
         Assertions.assertThrows(InvalidAmountException.class, () -> transactionService.createTransfer(
                 sourceWalletId, destinationWalletId, amount, "test-idempotency-key"
@@ -180,7 +180,8 @@ public class TransactionServiceTest {
 
         Transaction transaction = Transaction.deposit(
                 walletDestination,
-                BigDecimal.valueOf(100.00)
+                BigDecimal.valueOf(100.00),
+                "test-idempotency-key"
         );
 
         TransactionDto.Response transactionDto = createTransactionResponse(transactionId, transaction);
@@ -214,12 +215,14 @@ public class TransactionServiceTest {
 
         Transaction transaction1 = Transaction.deposit(
                 wallet,
-                BigDecimal.valueOf(100.00)
+                BigDecimal.valueOf(100.00),
+                "test-idempotency-key"
         );
 
         Transaction transaction2 = Transaction.deposit(
                 wallet,
-                BigDecimal.valueOf(200.00)
+                BigDecimal.valueOf(200.00),
+                "test-idempotency-key-2"
         );
 
         TransactionDto.Response transactionDto1 =
@@ -304,14 +307,6 @@ public class TransactionServiceTest {
                 .thenReturn(transactionDto);
     }
 
-    private void mockWalletDestination(
-            UUID walletDestinationId,
-            Wallet walletDestination
-    ) {
-        Mockito.when(walletRepository.findById(walletDestinationId))
-                .thenReturn(Optional.of(walletDestination));
-    }
-
     private void mockWalletSource(
             UUID walletSourceId,
             Wallet walletSource
@@ -337,5 +332,15 @@ public class TransactionServiceTest {
 
     private static Wallet createWallet(AppUser appUser) {
         return Wallet.create(appUser);
+    }
+
+    private void mockWalletForUpdate(UUID walletId, Wallet wallet) {
+        Mockito.when(walletRepository.findByIdForUpdate(walletId))
+                .thenReturn(Optional.of(wallet));
+    }
+
+    private void mockWalletForUpdateNotFound(UUID walletId) {
+        Mockito.when(walletRepository.findByIdForUpdate(walletId))
+                .thenReturn(Optional.empty());
     }
 }
