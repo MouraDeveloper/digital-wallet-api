@@ -619,6 +619,73 @@ public class TransactionServiceIntegrationTest {
         assertInvalidDepositAmount(BigDecimal.valueOf(-50.00));
     }
 
+    @Test
+    @Transactional
+    void shouldReturnSameDepositWhenIdempotencyKeyIsRepeated() {
+        var idempotencyKey = "deposit-idempotency-key";
+
+        var user = appUserRepository.saveAndFlush(
+                createAppUser("test123@gmail.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(Wallet.create(user));
+
+        var firstDeposit = transactionService.createDeposit(
+                wallet.getId(),
+                BigDecimal.valueOf(100.00),
+                idempotencyKey
+        );
+
+        var secondDeposit = transactionService.createDeposit(
+                wallet.getId(),
+                BigDecimal.valueOf(100.00),
+                idempotencyKey
+        );
+
+        Assertions.assertEquals(firstDeposit.id(), secondDeposit.id());
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100.00).compareTo(walletUpdated.getBalance())
+        );
+    }
+
+    @Test
+    @Transactional
+    void shouldThrowConflictWhenDepositIdempotencyKeyIsReusedWithDifferentPayload() {
+        var idempotencyKey = "deposit-idempotency-key";
+
+        var user = appUserRepository.saveAndFlush(
+                createAppUser("test123@gmail.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(Wallet.create(user));
+
+        transactionService.createDeposit(
+                wallet.getId(),
+                BigDecimal.valueOf(100.00),
+                idempotencyKey
+        );
+
+        Assertions.assertThrows(
+                IdempotencyConflictException.class, () -> transactionService.createDeposit(
+                        wallet.getId(),
+                        BigDecimal.valueOf(200.00),
+                        idempotencyKey
+                )
+        );
+
+        Assertions.assertEquals(1, transactionRepository.count());
+        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(100.00).compareTo(walletUpdated.getBalance())
+        );
+    }
+
 
     private void assertInvalidDepositAmount(BigDecimal amount) {
         var appUser = appUserRepository.saveAndFlush(
