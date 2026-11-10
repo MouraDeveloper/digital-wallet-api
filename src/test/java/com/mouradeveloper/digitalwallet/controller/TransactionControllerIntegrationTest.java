@@ -579,6 +579,101 @@ public class TransactionControllerIntegrationTest {
 
     @Test
     @Transactional
+    void shouldReturnSameDepositWhenIdempotencyKeyIsRepeated() throws Exception {
+        var idempotencyKey = "deposit-idempotency-key";
+        var user = appUserRepository.saveAndFlush(createUser("test123@example123@gmail.com"));
+        var wallet = walletRepository.saveAndFlush(Wallet.create(user));
+
+        var depositRequest = new TransactionDto.DepositRequest(
+                wallet.getId(),
+                BigDecimal.valueOf(150)
+        );
+
+        var json = objectMapper.writeValueAsString(depositRequest);
+
+        var mockOne = mockMvc.perform(post("/transactions/create-deposit")
+                        .content(json)
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists());
+
+        var mockTwo = mockMvc.perform(post("/transactions/create-deposit")
+                        .content(json)
+                        .header("Idempotency-Key", idempotencyKey)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").exists());
+
+        String bodyOne = mockOne.andReturn().getResponse().getContentAsString();
+        String bodyTwo = mockTwo.andReturn().getResponse().getContentAsString();
+
+        TransactionDto.Response firstResponse = objectMapper.readValue(bodyOne, TransactionDto.Response.class);
+        TransactionDto.Response secondResponse = objectMapper.readValue(bodyTwo, TransactionDto.Response.class);
+
+        Assertions.assertEquals(firstResponse.id(), secondResponse.id());
+
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(150).compareTo(walletUpdated.getBalance())
+        );
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnConflictWhenDepositIdempotencyKeyIsReusedWithDifferentPayload() throws Exception {
+        var appUser = appUserRepository.saveAndFlush(createUser("test123@example123@example.com"));
+        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+        var idempotencyKey = "deposit-idempotency-key";
+
+        var depositRequestOne = new TransactionDto.DepositRequest(
+                wallet.getId(),
+                BigDecimal.valueOf(150)
+        );
+
+        var depositRequestTwo = new TransactionDto.DepositRequest(
+                wallet.getId(),
+                BigDecimal.valueOf(200)
+        );
+
+        var json1 = objectMapper.writeValueAsString(depositRequestOne);
+        var json2 = objectMapper.writeValueAsString(depositRequestTwo);
+
+        mockMvc.perform(post("/transactions/create-deposit")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json1)
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/transactions/create-deposit")
+                        .content(json2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Idempotency-Key", idempotencyKey))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.error").value("Conflict"))
+                .andExpect(jsonPath("$.message").value("Idempotency key already used with different request data."))
+                .andExpect(jsonPath("$.path").value("/transactions/create-deposit"))
+                .andExpect(jsonPath("$.timestamp").exists());
+
+
+        Assertions.assertEquals(1, transactionRepository.count());
+
+        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(150).compareTo(walletUpdated.getBalance())
+        );
+    }
+
+
+    @Test
+    @Transactional
     void shouldReturnNotFoundWhenDepositDestinationWalletDoesNotExist() throws Exception {
         var depositRequest = new TransactionDto.DepositRequest(
                 UUID.randomUUID(),
