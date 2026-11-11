@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.models.entity;
 
 import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
+import com.mouradeveloper.digitalwallet.models.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
@@ -33,6 +34,10 @@ public class AppUser {
     @Column(nullable = false, length = 120, name = "password_hash")
     private String passwordHash;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Role role;
+
     @CreatedDate
     @Column(nullable = false, name = "created_at", updatable = false)
     private Instant createdAt;
@@ -41,18 +46,20 @@ public class AppUser {
     private AppUser(
             String fullName,
             String email,
-            String passwordHash
-    ){
+            String passwordHash,
+            Role role
+    ) {
         this.fullName = fullName;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.role = role;
     }
 
     public static AppUser create(
             String fullName,
             String email,
             String passwordHash
-    ){
+    ) {
 
         if (fullName == null || fullName.isBlank()) {
             throw new BusinessRuleException("Full name cannot be null or blank.");
@@ -69,7 +76,8 @@ public class AppUser {
         return new AppUser(
                 fullName,
                 email,
-                passwordHash
+                passwordHash,
+                Role.USER
         );
     }
 }
