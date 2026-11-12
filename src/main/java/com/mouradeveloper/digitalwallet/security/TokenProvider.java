@@ -36,4 +36,13 @@ public class TokenProvider {
                 )
                 .sign(algorithm);
     }
+
+    public String validateTokenAndGetSubject(String token) {
+        Algorithm algorithm = Algorithm.HMAC256(secretKey);
+
+        return JWT.require(algorithm)
+                .build()
+                .verify(token)
+                .getSubject();
+    }
 }
