@@ -3,6 +3,7 @@ package com.mouradeveloper.digitalwallet.service;
 import com.mouradeveloper.digitalwallet.exception.badRequest.InvalidIdempotencyKeyException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
 import com.mouradeveloper.digitalwallet.exception.conflict.IdempotencyConflictException;
+import com.mouradeveloper.digitalwallet.exception.forbidden.WalletAccessDeniedException;
 import com.mouradeveloper.digitalwallet.exception.notFound.TransactionNotFoundException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
@@ -12,6 +13,7 @@ import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
+import com.mouradeveloper.digitalwallet.security.AuthenticatedUserProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +30,7 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final WalletRepository walletRepository;
     private final TransactionMapper transactionMapper;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
 
     @Transactional
@@ -66,6 +69,12 @@ public class TransactionService {
         } else {
             destinationWallet = findWalletForUpdateOrThrow(destinationWalletId);
             sourceWallet = findWalletForUpdateOrThrow(sourceWalletId);
+        }
+
+        var ownerId = sourceWallet.getUser().getId();
+
+        if (!authenticatedUserProvider.getUserId().equals(ownerId)) {
+            throw new WalletAccessDeniedException(sourceWallet.getId());
         }
 
         var existingTransactionAfterLock =
@@ -203,6 +212,12 @@ public class TransactionService {
     ) {
         if (existingTransaction.getType() != TypeEnum.TRANSFER) {
             throw new IdempotencyConflictException();
+        }
+
+        var ownerId = existingTransaction.getSourceWallet().getUser().getId();
+
+        if (!authenticatedUserProvider.getUserId().equals(ownerId)) {
+            throw new WalletAccessDeniedException(existingTransaction.getSourceWallet().getId());
         }
 
         boolean sameSource =
