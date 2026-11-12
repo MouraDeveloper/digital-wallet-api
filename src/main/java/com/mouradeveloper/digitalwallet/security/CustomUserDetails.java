@@ -7,6 +7,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 
 public class CustomUserDetails implements UserDetails {
     private final AppUser appUser;
@@ -20,6 +21,10 @@ public class CustomUserDetails implements UserDetails {
         return List.of(
                 new SimpleGrantedAuthority("ROLE_" + appUser.getRole().name())
         );
+    }
+
+    public UUID getUserId() {
+        return appUser.getId();
     }
 
     @Override

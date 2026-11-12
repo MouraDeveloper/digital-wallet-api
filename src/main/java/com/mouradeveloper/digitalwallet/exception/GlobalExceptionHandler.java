@@ -3,6 +3,7 @@ package com.mouradeveloper.digitalwallet.exception;
 import com.mouradeveloper.digitalwallet.exception.badRequest.BadRequestException;
 import com.mouradeveloper.digitalwallet.exception.business.BusinessRuleException;
 import com.mouradeveloper.digitalwallet.exception.conflict.ConflictException;
+import com.mouradeveloper.digitalwallet.exception.forbidden.ForbiddenException;
 import com.mouradeveloper.digitalwallet.exception.notFound.NotFoundException;
 import com.mouradeveloper.digitalwallet.models.dto.error.StandardError;
 import jakarta.servlet.http.HttpServletRequest;
@@ -65,6 +66,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(standardError);
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<StandardError> handleForbiddenException(
+            ForbiddenException ex,
+            HttpServletRequest request
+    ){
+        return buildErrorResponse(ex, HttpStatus.FORBIDDEN, request.getRequestURI());
     }
 
 
