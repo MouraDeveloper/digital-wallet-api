@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.controller;
 
 import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
+import com.mouradeveloper.digitalwallet.models.dto.auth.Login;
 import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Transaction;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
@@ -13,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,10 +45,13 @@ public class TransactionControllerIntegrationTest {
             .withPassword("testpass");
 
     @DynamicPropertySource
-    static void configureProperties(org.springframework.test.context.DynamicPropertyRegistry registry) {
+    static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+        registry.add("security.jwt.secret",
+                () -> "transaction-integration-test-secret-key-123456");
+        registry.add("security.jwt.expiration", () -> "3600000");
     }
 
     @Autowired
@@ -63,18 +69,27 @@ public class TransactionControllerIntegrationTest {
     @Autowired
     private WalletRepository walletRepository;
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Test
     @Transactional
     void shouldCreateTransferAndReturnCreated() throws Exception {
         var sourceAppUser = createUser("test123@gmail.com");
         var destinationAppUser = createUser("test456@gmail.com");
-        var savedAppUsers = appUserRepository.saveAllAndFlush(List.of(sourceAppUser, destinationAppUser));
+
+        var savedAppUsers = appUserRepository.saveAllAndFlush(
+                List.of(sourceAppUser, destinationAppUser)
+        );
 
         var sourceWallet = Wallet.create(savedAppUsers.getFirst());
         sourceWallet.deposit(BigDecimal.valueOf(1000));
+
         var destinationWallet = Wallet.create(savedAppUsers.getLast());
-        var savedWallets = walletRepository.saveAllAndFlush(List.of(sourceWallet, destinationWallet));
+
+        var savedWallets = walletRepository.saveAllAndFlush(
+                List.of(sourceWallet, destinationWallet)
+        );
 
         var savedSourceWallet = savedWallets.getFirst();
         var savedDestinationWallet = savedWallets.getLast();
@@ -86,8 +101,10 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(transferRequest);
+        String token = login(savedAppUsers.getFirst().getEmail());
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", "test-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -101,10 +118,12 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.amount").value(100))
                 .andExpect(jsonPath("$.createdAt").exists());
 
-        var updatedSourceWallet = walletRepository.findById(savedSourceWallet.getId())
+        var updatedSourceWallet = walletRepository
+                .findById(savedSourceWallet.getId())
                 .orElseThrow();
 
-        var updatedDestinationWallet = walletRepository.findById(savedDestinationWallet.getId())
+        var updatedDestinationWallet = walletRepository
+                .findById(savedDestinationWallet.getId())
                 .orElseThrow();
 
         Assertions.assertEquals(
@@ -146,12 +165,16 @@ public class TransactionControllerIntegrationTest {
         var transaction = Transaction.transfer(
                 savedSourceWallet,
                 savedDestinationWallet,
-                BigDecimal.valueOf(100), "test-idempotency-key"
+                BigDecimal.valueOf(100),
+                "test-idempotency-key"
         );
 
         var savedTransaction = transactionRepository.saveAndFlush(transaction);
 
-        mockMvc.perform(get("/transactions/{id}", savedTransaction.getId()))
+        String token = login(sourceUser.getEmail());
+
+        mockMvc.perform(get("/transactions/{id}", savedTransaction.getId())
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(savedTransaction.getId()))
                 .andExpect(jsonPath("$.type").value("TRANSFER"))
@@ -189,12 +212,17 @@ public class TransactionControllerIntegrationTest {
         var transaction = Transaction.transfer(
                 savedSourceWallet,
                 savedDestinationWallet,
-                BigDecimal.valueOf(100), "test-idempotency-key"
+                BigDecimal.valueOf(100),
+                "test-idempotency-key"
         );
 
         transactionRepository.saveAndFlush(transaction);
 
-        mockMvc.perform(get("/transactions/wallet/{walletId}", savedSourceWallet.getId()))
+        String token = login(sourceUser.getEmail());
+
+        mockMvc.perform(get("/transactions/wallet/{walletId}",
+                        savedSourceWallet.getId())
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").exists())
                 .andExpect(jsonPath("$[0].type").value("TRANSFER"))
@@ -211,11 +239,19 @@ public class TransactionControllerIntegrationTest {
     void shouldReturnNotFoundWhenTransactionDoesNotExist() throws Exception {
         var transactionId = 999999L;
 
-        mockMvc.perform(get("/transactions/{id}", transactionId))
+        AppUser user = appUserRepository.saveAndFlush(
+                createUser("missing-transaction@example.com")
+        );
+
+        String token = login(user.getEmail());
+
+        mockMvc.perform(get("/transactions/{id}", transactionId)
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Not Found"))
-                .andExpect(jsonPath("$.path").value("/transactions/" + transactionId))
+                .andExpect(jsonPath("$.path")
+                        .value("/transactions/" + transactionId))
                 .andExpect(jsonPath("$.message")
                         .value("Transaction with ID " + transactionId + " not found."))
                 .andExpect(jsonPath("$.timestamp").exists());
@@ -223,7 +259,9 @@ public class TransactionControllerIntegrationTest {
 
     @Test
     @Transactional
-    void shouldReturnUnprocessableContentWhenSourceHasInsufficientFunds() throws Exception {
+    void shouldReturnUnprocessableContentWhenSourceHasInsufficientFunds()
+            throws Exception {
+
         var sourceUser = appUserRepository.saveAndFlush(
                 createUser("source@gmail.com")
         );
@@ -251,15 +289,18 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(transferRequest);
+        String token = login(sourceUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", "test-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.status").value(422))
                 .andExpect(jsonPath("$.error").value("Unprocessable Content"))
-                .andExpect(jsonPath("$.path").value("/transactions/create-transfer"))
+                .andExpect(jsonPath("$.path")
+                        .value("/transactions/create-transfer"))
                 .andExpect(jsonPath("$.message").value("Insufficient funds."))
                 .andExpect(jsonPath("$.timestamp").exists());
 
@@ -278,19 +319,26 @@ public class TransactionControllerIntegrationTest {
 
     @Test
     @Transactional
-    void shouldReturnSameTransactionWhenIdempotencyKeyIsRepeated() throws Exception {
+    void shouldReturnSameTransactionWhenIdempotencyKeyIsRepeated()
+            throws Exception {
+
         var idempotencyKey = "test-idempotency-key";
 
         var sourceUser = appUserRepository.saveAndFlush(
-                createUser("test123@example.com"));
+                createUser("test123@example.com")
+        );
 
         var destinationUser = appUserRepository.saveAndFlush(
-                createUser("test454@example.com"));
+                createUser("test454@example.com")
+        );
 
         var sourceWallet = Wallet.create(sourceUser);
         sourceWallet.deposit(BigDecimal.valueOf(100));
         walletRepository.saveAndFlush(sourceWallet);
-        var destinationWallet = walletRepository.saveAndFlush(Wallet.create(destinationUser));
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
 
         var transferRequest = new TransactionDto.TransferRequest(
                 sourceWallet.getId(),
@@ -299,8 +347,10 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(transferRequest);
+        String token = login(sourceUser.getEmail());
 
         var mockPrimary = mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json)
                         .header("Idempotency-Key", idempotencyKey))
@@ -308,40 +358,54 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.id").exists());
 
         var mockSec = mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Idempotency-Key", idempotencyKey)
                         .content(json))
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(status().isCreated());
 
-        String mockBodyPrimary = mockPrimary.andReturn().getResponse().getContentAsString();
-        String mockBodySec = mockSec.andReturn().getResponse().getContentAsString();
+        String mockBodyPrimary = mockPrimary.andReturn()
+                .getResponse().getContentAsString();
 
-        var firstResponse = objectMapper.readValue(mockBodyPrimary, TransactionDto.Response.class);
-        var secondResponse = objectMapper.readValue(mockBodySec, TransactionDto.Response.class);
+        String mockBodySec = mockSec.andReturn()
+                .getResponse().getContentAsString();
 
-        Assertions.assertEquals(
-                firstResponse.id(),
-                secondResponse.id()
+        var firstResponse = objectMapper.readValue(
+                mockBodyPrimary, TransactionDto.Response.class
         );
 
+        var secondResponse = objectMapper.readValue(
+                mockBodySec, TransactionDto.Response.class
+        );
+
+        Assertions.assertEquals(firstResponse.id(), secondResponse.id());
         Assertions.assertEquals(1, transactionRepository.count());
 
-        var walletSource = walletRepository.findById(sourceWallet.getId()).orElseThrow();
-        var walletDestination = walletRepository.findById(destinationWallet.getId()).orElseThrow();
+        var walletSource = walletRepository.findById(
+                sourceWallet.getId()
+        ).orElseThrow();
+
+        var walletDestination = walletRepository.findById(
+                destinationWallet.getId()
+        ).orElseThrow();
 
         Assertions.assertEquals(
-                0, BigDecimal.valueOf(50).compareTo(walletSource.getBalance())
+                0,
+                BigDecimal.valueOf(50).compareTo(walletSource.getBalance())
         );
 
         Assertions.assertEquals(
-                0, BigDecimal.valueOf(50).compareTo(walletDestination.getBalance())
+                0,
+                BigDecimal.valueOf(50).compareTo(walletDestination.getBalance())
         );
     }
 
     @Test
     @Transactional
-    void shouldReturnConflictWhenIdempotencyKeyIsReusedWithDifferentPayload() throws Exception {
+    void shouldReturnConflictWhenIdempotencyKeyIsReusedWithDifferentPayload()
+            throws Exception {
+
         var idempotencyKey = "test-idempotency-key";
 
         var sourceUser = appUserRepository.saveAndFlush(
@@ -366,22 +430,26 @@ public class TransactionControllerIntegrationTest {
                 BigDecimal.valueOf(50)
         );
 
-        var transferRequestSec = new TransactionDto.TransferRequest(
+        var transferRequestTwo = new TransactionDto.TransferRequest(
                 sourceWallet.getId(),
                 destinationWallet.getId(),
                 BigDecimal.valueOf(60)
         );
 
         var json = objectMapper.writeValueAsString(transferRequestOne);
-        var jsonSec = objectMapper.writeValueAsString(transferRequestSec);
+        var jsonSec = objectMapper.writeValueAsString(transferRequestTwo);
+
+        String token = login(sourceUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", idempotencyKey)
                         .content(json)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", idempotencyKey)
                         .content(jsonSec)
                         .contentType(MediaType.APPLICATION_JSON))
@@ -394,10 +462,7 @@ public class TransactionControllerIntegrationTest {
                         .value("/transactions/create-transfer"))
                 .andExpect(jsonPath("$.timestamp").exists());
 
-        Assertions.assertEquals(
-                1,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(1, transactionRepository.count());
 
         var walletSource = walletRepository
                 .findById(sourceWallet.getId())
@@ -444,8 +509,10 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(transferRequest);
+        String token = login(sourceUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", " ")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -458,10 +525,7 @@ public class TransactionControllerIntegrationTest {
                         .value("/transactions/create-transfer"))
                 .andExpect(jsonPath("$.timestamp").exists());
 
-        Assertions.assertEquals(
-                0,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(0, transactionRepository.count());
 
         var updatedSourceWallet = walletRepository
                 .findById(sourceWallet.getId())
@@ -473,20 +537,20 @@ public class TransactionControllerIntegrationTest {
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(100)
-                        .compareTo(updatedSourceWallet.getBalance())
+                BigDecimal.valueOf(100).compareTo(updatedSourceWallet.getBalance())
         );
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.ZERO
-                        .compareTo(updatedDestinationWallet.getBalance())
+                BigDecimal.ZERO.compareTo(updatedDestinationWallet.getBalance())
         );
     }
 
     @Test
     @Transactional
-    void shouldReturnBadRequestWhenIdempotencyKeyHeaderIsMissing() throws Exception {
+    void shouldReturnBadRequestWhenIdempotencyKeyHeaderIsMissing()
+            throws Exception {
+
         var sourceUser = appUserRepository.saveAndFlush(
                 createUser("missing-key-source@example.com")
         );
@@ -510,16 +574,15 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(transferRequest);
+        String token = login(sourceUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-transfer")
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
                 .andExpect(status().isBadRequest());
 
-        Assertions.assertEquals(
-                0,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(0, transactionRepository.count());
 
         var updatedSourceWallet = walletRepository
                 .findById(sourceWallet.getId())
@@ -531,22 +594,25 @@ public class TransactionControllerIntegrationTest {
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(100)
-                        .compareTo(updatedSourceWallet.getBalance())
+                BigDecimal.valueOf(100).compareTo(updatedSourceWallet.getBalance())
         );
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.ZERO
-                        .compareTo(updatedDestinationWallet.getBalance())
+                BigDecimal.ZERO.compareTo(updatedDestinationWallet.getBalance())
         );
     }
 
     @Test
     @Transactional
     void shouldCreateDepositAndReturnCreated() throws Exception {
-        var appUser = appUserRepository.saveAndFlush(createUser("test123@example.com"));
-        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+        var appUser = appUserRepository.saveAndFlush(
+                createUser("test123@example.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(
+                Wallet.create(appUser)
+        );
 
         var depositRequest = new TransactionDto.DepositRequest(
                 wallet.getId(),
@@ -554,22 +620,27 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(depositRequest);
+        String token = login(appUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", "deposit-idempotency-key")
                         .content(json)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists())
                 .andExpect(jsonPath("$.type").value("DEPOSIT"))
-                .andExpect(jsonPath("$.destinationWalletId").value(wallet.getId().toString()))
+                .andExpect(jsonPath("$.destinationWalletId")
+                        .value(wallet.getId().toString()))
                 .andExpect(jsonPath("$.amount").value(200))
                 .andExpect(jsonPath("$.sourceWalletId").isEmpty())
                 .andExpect(jsonPath("$.createdAt").exists());
 
         Assertions.assertEquals(1, transactionRepository.count());
 
-        var walletAfterDeposit = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletAfterDeposit = walletRepository.findById(
+                wallet.getId()
+        ).orElseThrow();
 
         Assertions.assertEquals(
                 0,
@@ -579,10 +650,18 @@ public class TransactionControllerIntegrationTest {
 
     @Test
     @Transactional
-    void shouldReturnSameDepositWhenIdempotencyKeyIsRepeated() throws Exception {
+    void shouldReturnSameDepositWhenIdempotencyKeyIsRepeated()
+            throws Exception {
+
         var idempotencyKey = "deposit-idempotency-key";
-        var user = appUserRepository.saveAndFlush(createUser("test123@example123@gmail.com"));
-        var wallet = walletRepository.saveAndFlush(Wallet.create(user));
+
+        var user = appUserRepository.saveAndFlush(
+                createUser("deposit-repeat@example.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(
+                Wallet.create(user)
+        );
 
         var depositRequest = new TransactionDto.DepositRequest(
                 wallet.getId(),
@@ -590,8 +669,10 @@ public class TransactionControllerIntegrationTest {
         );
 
         var json = objectMapper.writeValueAsString(depositRequest);
+        String token = login(user.getEmail());
 
         var mockOne = mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .content(json)
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON))
@@ -599,23 +680,33 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.id").exists());
 
         var mockTwo = mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .content(json)
                         .header("Idempotency-Key", idempotencyKey)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").exists());
 
-        String bodyOne = mockOne.andReturn().getResponse().getContentAsString();
-        String bodyTwo = mockTwo.andReturn().getResponse().getContentAsString();
+        String bodyOne = mockOne.andReturn()
+                .getResponse().getContentAsString();
 
-        TransactionDto.Response firstResponse = objectMapper.readValue(bodyOne, TransactionDto.Response.class);
-        TransactionDto.Response secondResponse = objectMapper.readValue(bodyTwo, TransactionDto.Response.class);
+        String bodyTwo = mockTwo.andReturn()
+                .getResponse().getContentAsString();
+
+        TransactionDto.Response firstResponse = objectMapper.readValue(
+                bodyOne, TransactionDto.Response.class
+        );
+
+        TransactionDto.Response secondResponse = objectMapper.readValue(
+                bodyTwo, TransactionDto.Response.class
+        );
 
         Assertions.assertEquals(firstResponse.id(), secondResponse.id());
-
         Assertions.assertEquals(1, transactionRepository.count());
 
-        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletUpdated = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
 
         Assertions.assertEquals(
                 0,
@@ -625,9 +716,17 @@ public class TransactionControllerIntegrationTest {
 
     @Test
     @Transactional
-    void shouldReturnConflictWhenDepositIdempotencyKeyIsReusedWithDifferentPayload() throws Exception {
-        var appUser = appUserRepository.saveAndFlush(createUser("test123@example123@example.com"));
-        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+    void shouldReturnConflictWhenDepositIdempotencyKeyIsReusedWithDifferentPayload()
+            throws Exception {
+
+        var appUser = appUserRepository.saveAndFlush(
+                createUser("deposit-conflict@example.com")
+        );
+
+        var wallet = walletRepository.saveAndFlush(
+                Wallet.create(appUser)
+        );
+
         var idempotencyKey = "deposit-idempotency-key";
 
         var depositRequestOne = new TransactionDto.DepositRequest(
@@ -643,27 +742,34 @@ public class TransactionControllerIntegrationTest {
         var json1 = objectMapper.writeValueAsString(depositRequestOne);
         var json2 = objectMapper.writeValueAsString(depositRequestTwo);
 
+        String token = login(appUser.getEmail());
+
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json1)
                         .header("Idempotency-Key", idempotencyKey))
                 .andExpect(status().isCreated());
 
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .content(json2)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Idempotency-Key", idempotencyKey))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.error").value("Conflict"))
-                .andExpect(jsonPath("$.message").value("Idempotency key already used with different request data."))
-                .andExpect(jsonPath("$.path").value("/transactions/create-deposit"))
+                .andExpect(jsonPath("$.message")
+                        .value("Idempotency key already used with different request data."))
+                .andExpect(jsonPath("$.path")
+                        .value("/transactions/create-deposit"))
                 .andExpect(jsonPath("$.timestamp").exists());
-
 
         Assertions.assertEquals(1, transactionRepository.count());
 
-        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletUpdated = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
 
         Assertions.assertEquals(
                 0,
@@ -671,10 +777,11 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
-
     @Test
     @Transactional
-    void shouldReturnNotFoundWhenDepositDestinationWalletDoesNotExist() throws Exception {
+    void shouldReturnNotFoundWhenDepositDestinationWalletDoesNotExist()
+            throws Exception {
+
         var depositRequest = new TransactionDto.DepositRequest(
                 UUID.randomUUID(),
                 BigDecimal.valueOf(100)
@@ -682,33 +789,51 @@ public class TransactionControllerIntegrationTest {
 
         var json = objectMapper.writeValueAsString(depositRequest);
 
+        AppUser user = appUserRepository.saveAndFlush(
+                createUser("missing-wallet@example.com")
+        );
+
+        String token = login(user.getEmail());
+
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .header("Idempotency-Key", "deposit-idempotency-key")
                         .content(json))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Not Found"))
-                .andExpect(jsonPath("$.message").value("Wallet with ID " + depositRequest.destinationWalletId() + " not found."))
-                .andExpect(jsonPath("$.path").value("/transactions/create-deposit"))
+                .andExpect(jsonPath("$.message")
+                        .value("Wallet with ID " +
+                                depositRequest.destinationWalletId() +
+                                " not found."))
+                .andExpect(jsonPath("$.path")
+                        .value("/transactions/create-deposit"))
                 .andExpect(jsonPath("$.timestamp").exists());
 
-        Assertions.assertEquals(
-                0,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(0, transactionRepository.count());
     }
 
     @Test
     @Transactional
     void shouldReturnBadRequestWhenDepositAmountIsZero() throws Exception {
-        var appUser = appUserRepository.saveAndFlush(createUser("test123@example.com"));
+        var appUser = appUserRepository.saveAndFlush(
+                createUser("test123@example.com")
+        );
 
         var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
 
-        var json = objectMapper.writeValueAsString(new TransactionDto.DepositRequest(wallet.getId(), BigDecimal.ZERO));
+        var json = objectMapper.writeValueAsString(
+                new TransactionDto.DepositRequest(
+                        wallet.getId(),
+                        BigDecimal.ZERO
+                )
+        );
+
+        String token = login(appUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .content(json)
                         .header("Idempotency-Key", "deposit-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON))
@@ -716,12 +841,11 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
 
-        Assertions.assertEquals(
-                0,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(0, transactionRepository.count());
 
-        var walletAfterDepositAttempt = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletAfterDepositAttempt = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
 
         Assertions.assertEquals(
                 0,
@@ -732,12 +856,23 @@ public class TransactionControllerIntegrationTest {
     @Test
     @Transactional
     void shouldReturnBadRequestWhenDepositAmountIsNegative() throws Exception {
-        var appUser = appUserRepository.saveAndFlush(createUser("test123@example.com"));
+        var appUser = appUserRepository.saveAndFlush(
+                createUser("test123@example.com")
+        );
+
         var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
 
-        var json = objectMapper.writeValueAsString(new TransactionDto.DepositRequest(wallet.getId(), BigDecimal.valueOf(-50)));
+        var json = objectMapper.writeValueAsString(
+                new TransactionDto.DepositRequest(
+                        wallet.getId(),
+                        BigDecimal.valueOf(-50)
+                )
+        );
+
+        String token = login(appUser.getEmail());
 
         mockMvc.perform(post("/transactions/create-deposit")
+                        .header("Authorization", "Bearer " + token)
                         .header("Idempotency-Key", "deposit-idempotency-key")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json))
@@ -745,12 +880,11 @@ public class TransactionControllerIntegrationTest {
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.error").value("Bad Request"));
 
-        Assertions.assertEquals(
-                0,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(0, transactionRepository.count());
 
-        var walletAfterDepositAttempt = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletAfterDepositAttempt = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
 
         Assertions.assertEquals(
                 0,
@@ -758,12 +892,35 @@ public class TransactionControllerIntegrationTest {
         );
     }
 
+    private String login(String email) throws Exception {
+        Login.Request request = new Login.Request(
+                email,
+                "password123"
+        );
+
+        String json = objectMapper.writeValueAsString(request);
+
+        String response = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Login.Response loginResponse = objectMapper.readValue(
+                response,
+                Login.Response.class
+        );
+
+        return loginResponse.token();
+    }
 
     private AppUser createUser(String email) {
         return AppUser.create(
                 "test",
                 email,
-                "password123"
+                passwordEncoder.encode("password123")
         );
     }
 }
