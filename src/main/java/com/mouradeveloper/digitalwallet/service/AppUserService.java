@@ -1,3 +1,4 @@
+
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.conflict.EmailAlreadyExistsException;
@@ -8,7 +9,9 @@ import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
+import com.mouradeveloper.digitalwallet.security.AuthenticatedUserProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,7 +26,7 @@ public class AppUserService {
     private final PasswordEncoder passwordEncoder;
     private final WalletRepository walletRepository;
     private final AppUserMapper appUserMapper;
-
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
     @Transactional
     public AppUserDto.Response createUser(AppUserDto.Request request) {
@@ -48,13 +51,14 @@ public class AppUserService {
         return appUserMapper.toResponse(savedUser);
     }
 
-
     @Transactional(readOnly = true)
     public AppUserDto.Response findById(UUID id) {
         var appUser = appUserRepository.findById(id)
-                .orElseThrow(
-                        () -> new AppUserNotFoundException(id)
-                );
+                .orElseThrow(() -> new AppUserNotFoundException(id));
+
+        if (!appUser.getId().equals(authenticatedUserProvider.getUserId())) {
+            throw new AccessDeniedException("Access denied to user: " + id);
+        }
 
         return appUserMapper.toResponse(appUser);
     }
