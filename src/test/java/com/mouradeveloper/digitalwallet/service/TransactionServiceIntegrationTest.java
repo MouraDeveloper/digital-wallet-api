@@ -13,13 +13,16 @@ import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.TransactionRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
+import com.mouradeveloper.digitalwallet.security.AuthenticatedUserProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -45,6 +48,12 @@ public class TransactionServiceIntegrationTest {
         registry.add("spring.datasource.url", postgres::getJdbcUrl);
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
+
+        registry.add(
+                "security.jwt.secret",
+                () -> "transaction-service-integration-test-key"
+        );
+        registry.add("security.jwt.expiration", () -> "3600000");
     }
 
     @Autowired
@@ -59,13 +68,15 @@ public class TransactionServiceIntegrationTest {
     @Autowired
     private TransactionRepository transactionRepository;
 
+    @MockitoBean
+    private AuthenticatedUserProvider authenticatedUserProvider;
+
     @AfterEach
     void cleanUp() {
         transactionRepository.deleteAll();
         walletRepository.deleteAll();
         appUserRepository.deleteAll();
     }
-
 
     @Test
     @Transactional
@@ -79,9 +90,12 @@ public class TransactionServiceIntegrationTest {
 
         var sourceWallet = Wallet.create(sourceUser);
         var destinationWallet = Wallet.create(destinationUser);
+
         walletRepository.saveAll(List.of(sourceWallet, destinationWallet));
 
         sourceWallet.deposit(BigDecimal.valueOf(100.00));
+
+        mockAuthenticatedUser(sourceUser);
 
         transactionService.createTransfer(
                 sourceWallet.getId(),
@@ -105,8 +119,16 @@ public class TransactionServiceIntegrationTest {
 
         Assertions.assertEquals(TypeEnum.TRANSFER, transaction.getType());
         Assertions.assertEquals(amount, transaction.getAmount());
-        Assertions.assertEquals(sourceWallet.getId(), transaction.getSourceWallet().getId());
-        Assertions.assertEquals(destinationWallet.getId(), transaction.getDestinationWallet().getId());
+
+        Assertions.assertEquals(
+                sourceWallet.getId(),
+                transaction.getSourceWallet().getId()
+        );
+
+        Assertions.assertEquals(
+                destinationWallet.getId(),
+                transaction.getDestinationWallet().getId()
+        );
     }
 
     @Test
@@ -121,12 +143,16 @@ public class TransactionServiceIntegrationTest {
 
         var sourceWallet = Wallet.create(sourceUser);
         var destinationWallet = Wallet.create(destinationUser);
+
         walletRepository.saveAll(List.of(sourceWallet, destinationWallet));
 
         sourceWallet.deposit(BigDecimal.valueOf(50.00));
 
+        mockAuthenticatedUser(sourceUser);
+
         Assertions.assertThrows(
-                InsufficientFundsException.class, () -> transactionService.createTransfer(
+                InsufficientFundsException.class,
+                () -> transactionService.createTransfer(
                         sourceWallet.getId(),
                         destinationWallet.getId(),
                         amount,
@@ -134,8 +160,16 @@ public class TransactionServiceIntegrationTest {
                 )
         );
 
-        Assertions.assertEquals(0, BigDecimal.valueOf(50.00).compareTo(sourceWallet.getBalance()));
-        Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(destinationWallet.getBalance()));
+        Assertions.assertEquals(
+                0,
+                BigDecimal.valueOf(50.00).compareTo(sourceWallet.getBalance())
+        );
+
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(destinationWallet.getBalance())
+        );
+
         Assertions.assertEquals(0, transactionRepository.count());
     }
 
@@ -152,8 +186,11 @@ public class TransactionServiceIntegrationTest {
 
         sourceWallet.deposit(BigDecimal.valueOf(200.00));
 
+        mockAuthenticatedUser(sourceUser);
+
         Assertions.assertThrows(
-                SameWalletTransferException.class, () -> transactionService.createTransfer(
+                SameWalletTransferException.class,
+                () -> transactionService.createTransfer(
                         sourceWallet.getId(),
                         sourceWallet.getId(),
                         amount,
@@ -165,6 +202,7 @@ public class TransactionServiceIntegrationTest {
                 0,
                 BigDecimal.valueOf(200.00).compareTo(sourceWallet.getBalance())
         );
+
         Assertions.assertEquals(0, transactionRepository.count());
     }
 
@@ -179,8 +217,11 @@ public class TransactionServiceIntegrationTest {
 
         var sourceWalletId = UUID.randomUUID();
 
+        mockAuthenticatedUser(destinationUser);
+
         Assertions.assertThrows(
-                WalletNotFoundException.class, () -> transactionService.createTransfer(
+                WalletNotFoundException.class,
+                () -> transactionService.createTransfer(
                         sourceWalletId,
                         wallet.getId(),
                         BigDecimal.valueOf(100.00),
@@ -188,7 +229,11 @@ public class TransactionServiceIntegrationTest {
                 )
         );
 
-        Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getBalance()));
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(wallet.getBalance())
+        );
+
         Assertions.assertEquals(0, transactionRepository.count());
     }
 
@@ -203,8 +248,11 @@ public class TransactionServiceIntegrationTest {
 
         var destinationWalletId = UUID.randomUUID();
 
+        mockAuthenticatedUser(sourceUser);
+
         Assertions.assertThrows(
-                WalletNotFoundException.class, () -> transactionService.createTransfer(
+                WalletNotFoundException.class,
+                () -> transactionService.createTransfer(
                         wallet.getId(),
                         destinationWalletId,
                         BigDecimal.valueOf(100.00),
@@ -212,22 +260,26 @@ public class TransactionServiceIntegrationTest {
                 )
         );
 
-        Assertions.assertEquals(0, BigDecimal.ZERO.compareTo(wallet.getBalance()));
+        Assertions.assertEquals(
+                0,
+                BigDecimal.ZERO.compareTo(wallet.getBalance())
+        );
+
         Assertions.assertEquals(0, transactionRepository.count());
     }
 
     @Test
     void shouldPreventConcurrentTransfersFromOverspending() throws Exception {
         var sourceUser = appUserRepository.saveAndFlush(
-                AppUser.create("Source User", "source.concurrent@gmail.com", "password123")
+                createAppUser("source.concurrent@gmail.com")
         );
 
         var destinationUserA = appUserRepository.saveAndFlush(
-                AppUser.create("Destination A", "destination.a@gmail.com", "password123")
+                createAppUser("destination.a@gmail.com")
         );
 
         var destinationUserB = appUserRepository.saveAndFlush(
-                AppUser.create("Destination B", "destination.b@gmail.com", "password123")
+                createAppUser("destination.b@gmail.com")
         );
 
         var sourceWallet = Wallet.create(sourceUser);
@@ -244,13 +296,15 @@ public class TransactionServiceIntegrationTest {
         var savedDestinationWalletA = savedWallets.get(1);
         var savedDestinationWalletB = savedWallets.get(2);
 
+        mockAuthenticatedUser(sourceUser);
+
         var executor = Executors.newFixedThreadPool(2);
 
         var readyLatch = new CountDownLatch(2);
         var startLatch = new CountDownLatch(1);
 
-        var successCount = 0;
-        var insufficientFundsCount = 0;
+        int successCount = 0;
+        int insufficientFundsCount = 0;
 
         try {
             var transferA = executor.submit(() -> {
@@ -278,7 +332,6 @@ public class TransactionServiceIntegrationTest {
             });
 
             readyLatch.await();
-
             startLatch.countDown();
 
             try {
@@ -333,8 +386,7 @@ public class TransactionServiceIntegrationTest {
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(80)
-                        .compareTo(destinationTotal)
+                BigDecimal.valueOf(80).compareTo(destinationTotal)
         );
     }
 
@@ -343,47 +395,62 @@ public class TransactionServiceIntegrationTest {
         var idempotencyKey = "unique-idempotency-key";
         var amount = BigDecimal.valueOf(30.00);
 
-        var appUserSource = appUserRepository.saveAndFlush(
+        var sourceUser = appUserRepository.saveAndFlush(
                 createAppUser("test-source@example.com")
         );
-        var appUserDestination = appUserRepository.saveAndFlush(
+
+        var destinationUser = appUserRepository.saveAndFlush(
                 createAppUser("test-destination@example.com")
         );
 
-        var walletSource = Wallet.create(appUserSource);
-        walletSource.deposit(BigDecimal.valueOf(100.00));
-        walletRepository.saveAndFlush(walletSource);
-        var walletDestination = walletRepository.saveAndFlush(Wallet.create(appUserDestination));
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(sourceWallet);
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        mockAuthenticatedUser(sourceUser);
 
         var firstResponse = transactionService.createTransfer(
-                walletSource.getId(),
-                walletDestination.getId(),
+                sourceWallet.getId(),
+                destinationWallet.getId(),
                 amount,
                 idempotencyKey
         );
 
         var secondResponse = transactionService.createTransfer(
-                walletSource.getId(),
-                walletDestination.getId(),
+                sourceWallet.getId(),
+                destinationWallet.getId(),
                 amount,
                 idempotencyKey
         );
 
+        Assertions.assertEquals(
+                firstResponse.id(),
+                secondResponse.id()
+        );
 
-        Assertions.assertEquals(firstResponse.id(), secondResponse.id());
         Assertions.assertEquals(1, transactionRepository.count());
 
-        var walletSourceUpdated = walletRepository.findById(walletSource.getId()).orElseThrow();
-        var walletDestinationUpdated = walletRepository.findById(walletDestination.getId()).orElseThrow();
+        var sourceUpdated = walletRepository
+                .findById(sourceWallet.getId())
+                .orElseThrow();
+
+        var destinationUpdated = walletRepository
+                .findById(destinationWallet.getId())
+                .orElseThrow();
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(70.00).compareTo(walletSourceUpdated.getBalance())
+                BigDecimal.valueOf(70.00)
+                        .compareTo(sourceUpdated.getBalance())
         );
 
         Assertions.assertEquals(
                 0,
-                amount.compareTo(walletDestinationUpdated.getBalance())
+                amount.compareTo(destinationUpdated.getBalance())
         );
     }
 
@@ -392,29 +459,36 @@ public class TransactionServiceIntegrationTest {
     void shouldThrowConflictWhenIdempotencyKeyIsReusedWithDifferentPayload() {
         var idempotencyKey = "conflict-idempotency-key";
 
-        var sourceAppUser = appUserRepository.saveAndFlush(
+        var sourceUser = appUserRepository.saveAndFlush(
                 createAppUser("test123@example.com")
         );
-        var destinationAppUser = appUserRepository.saveAndFlush(
+
+        var destinationUser = appUserRepository.saveAndFlush(
                 createAppUser("test132@example.com")
         );
 
-        var walletSource = Wallet.create(sourceAppUser);
-        walletSource.deposit(BigDecimal.valueOf(100.00));
-        walletRepository.saveAndFlush(walletSource);
-        var walletDestination = walletRepository.saveAndFlush(Wallet.create(destinationAppUser));
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(sourceWallet);
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        mockAuthenticatedUser(sourceUser);
 
         transactionService.createTransfer(
-                walletSource.getId(),
-                walletDestination.getId(),
+                sourceWallet.getId(),
+                destinationWallet.getId(),
                 BigDecimal.valueOf(30.00),
                 idempotencyKey
         );
 
         Assertions.assertThrows(
-                IdempotencyConflictException.class, () -> transactionService.createTransfer(
-                        walletSource.getId(),
-                        walletDestination.getId(),
+                IdempotencyConflictException.class,
+                () -> transactionService.createTransfer(
+                        sourceWallet.getId(),
+                        destinationWallet.getId(),
                         BigDecimal.valueOf(40.00),
                         idempotencyKey
                 )
@@ -424,12 +498,14 @@ public class TransactionServiceIntegrationTest {
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(70.00).compareTo(walletSource.getBalance())
+                BigDecimal.valueOf(70.00)
+                        .compareTo(sourceWallet.getBalance())
         );
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(30.00).compareTo(walletDestination.getBalance())
+                BigDecimal.valueOf(30.00)
+                        .compareTo(destinationWallet.getBalance())
         );
     }
 
@@ -452,21 +528,23 @@ public class TransactionServiceIntegrationTest {
         var idempotencyKey = "concurrent-idempotency-key";
         var amount = BigDecimal.valueOf(30.00);
 
-        var sourceAppUser = appUserRepository.saveAndFlush(
+        var sourceUser = appUserRepository.saveAndFlush(
                 createAppUser("test123@example.com")
         );
 
-        var destinationAppUser = appUserRepository.saveAndFlush(
+        var destinationUser = appUserRepository.saveAndFlush(
                 createAppUser("test132@example.com")
         );
 
-        var walletSource = Wallet.create(sourceAppUser);
-        walletSource.deposit(BigDecimal.valueOf(100.00));
-        walletRepository.saveAndFlush(walletSource);
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(sourceWallet);
 
-        var walletDestination = walletRepository.saveAndFlush(
-                Wallet.create(destinationAppUser)
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
         );
+
+        mockAuthenticatedUser(sourceUser);
 
         CountDownLatch readyLatch = new CountDownLatch(2);
         CountDownLatch startLatch = new CountDownLatch(1);
@@ -481,8 +559,8 @@ public class TransactionServiceIntegrationTest {
                 startLatch.await();
 
                 return transactionService.createTransfer(
-                        walletSource.getId(),
-                        walletDestination.getId(),
+                        sourceWallet.getId(),
+                        destinationWallet.getId(),
                         amount,
                         idempotencyKey
                 );
@@ -493,8 +571,8 @@ public class TransactionServiceIntegrationTest {
                 startLatch.await();
 
                 return transactionService.createTransfer(
-                        walletSource.getId(),
-                        walletDestination.getId(),
+                        sourceWallet.getId(),
+                        destinationWallet.getId(),
                         amount,
                         idempotencyKey
                 );
@@ -505,7 +583,6 @@ public class TransactionServiceIntegrationTest {
 
             firstResponse = firstFuture.get();
             secondResponse = secondFuture.get();
-
         } finally {
             executor.shutdown();
         }
@@ -515,40 +592,39 @@ public class TransactionServiceIntegrationTest {
                 secondResponse.id()
         );
 
-        Assertions.assertEquals(
-                1,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(1, transactionRepository.count());
 
-        var sourceWalletUpdated = walletRepository
-                .findById(walletSource.getId())
+        var sourceUpdated = walletRepository
+                .findById(sourceWallet.getId())
                 .orElseThrow();
 
-        var destinationWalletUpdated = walletRepository
-                .findById(walletDestination.getId())
+        var destinationUpdated = walletRepository
+                .findById(destinationWallet.getId())
                 .orElseThrow();
 
         Assertions.assertEquals(
                 0,
                 BigDecimal.valueOf(70.00)
-                        .compareTo(sourceWalletUpdated.getBalance())
+                        .compareTo(sourceUpdated.getBalance())
         );
 
         Assertions.assertEquals(
                 0,
                 BigDecimal.valueOf(30.00)
-                        .compareTo(destinationWalletUpdated.getBalance())
+                        .compareTo(destinationUpdated.getBalance())
         );
     }
 
     @Test
     @Transactional
     void shouldCreateDepositAndUpdateWalletBalance() {
-        var appUser = appUserRepository.saveAndFlush(
+        var user = appUserRepository.saveAndFlush(
                 createAppUser("teste123@gmail.com")
         );
 
-        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+        var wallet = walletRepository.saveAndFlush(Wallet.create(user));
+
+        mockAuthenticatedUser(user);
 
         var transaction = transactionService.createDeposit(
                 wallet.getId(),
@@ -556,12 +632,11 @@ public class TransactionServiceIntegrationTest {
                 "deposit-idempotency-key"
         );
 
-        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletUpdated = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
 
-        Assertions.assertEquals(
-                TypeEnum.DEPOSIT,
-                transaction.type()
-        );
+        Assertions.assertEquals(TypeEnum.DEPOSIT, transaction.type());
 
         Assertions.assertEquals(
                 0,
@@ -569,10 +644,7 @@ public class TransactionServiceIntegrationTest {
                         .compareTo(walletUpdated.getBalance())
         );
 
-        Assertions.assertEquals(
-                1,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(1, transactionRepository.count());
 
         Assertions.assertEquals(
                 0,
@@ -591,20 +663,24 @@ public class TransactionServiceIntegrationTest {
     @Test
     @Transactional
     void shouldThrowWhenDepositDestinationWalletDoesNotExist() {
-        var uuid = UUID.randomUUID();
+        var walletId = UUID.randomUUID();
+
+        var user = appUserRepository.saveAndFlush(
+                createAppUser("missing-deposit-wallet@example.com")
+        );
+
+        mockAuthenticatedUser(user);
 
         Assertions.assertThrows(
-                WalletNotFoundException.class, () -> transactionService.createDeposit(
-                        uuid,
+                WalletNotFoundException.class,
+                () -> transactionService.createDeposit(
+                        walletId,
                         BigDecimal.valueOf(100.00),
                         "deposit-idempotency-key"
                 )
         );
 
-        Assertions.assertEquals(
-                0,
-                transactionRepository.count()
-        );
+        Assertions.assertEquals(0, transactionRepository.count());
     }
 
     @Test
@@ -630,6 +706,8 @@ public class TransactionServiceIntegrationTest {
 
         var wallet = walletRepository.saveAndFlush(Wallet.create(user));
 
+        mockAuthenticatedUser(user);
+
         var firstDeposit = transactionService.createDeposit(
                 wallet.getId(),
                 BigDecimal.valueOf(100.00),
@@ -645,11 +723,14 @@ public class TransactionServiceIntegrationTest {
         Assertions.assertEquals(firstDeposit.id(), secondDeposit.id());
         Assertions.assertEquals(1, transactionRepository.count());
 
-        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+        var walletUpdated = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(100.00).compareTo(walletUpdated.getBalance())
+                BigDecimal.valueOf(100.00)
+                        .compareTo(walletUpdated.getBalance())
         );
     }
 
@@ -664,6 +745,8 @@ public class TransactionServiceIntegrationTest {
 
         var wallet = walletRepository.saveAndFlush(Wallet.create(user));
 
+        mockAuthenticatedUser(user);
+
         transactionService.createDeposit(
                 wallet.getId(),
                 BigDecimal.valueOf(100.00),
@@ -671,7 +754,8 @@ public class TransactionServiceIntegrationTest {
         );
 
         Assertions.assertThrows(
-                IdempotencyConflictException.class, () -> transactionService.createDeposit(
+                IdempotencyConflictException.class,
+                () -> transactionService.createDeposit(
                         wallet.getId(),
                         BigDecimal.valueOf(200.00),
                         idempotencyKey
@@ -679,78 +763,101 @@ public class TransactionServiceIntegrationTest {
         );
 
         Assertions.assertEquals(1, transactionRepository.count());
-        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
+
+        var walletUpdated = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
+
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(100.00).compareTo(walletUpdated.getBalance())
+                BigDecimal.valueOf(100.00)
+                        .compareTo(walletUpdated.getBalance())
         );
     }
 
-
     private void assertInvalidDepositAmount(BigDecimal amount) {
-        var appUser = appUserRepository.saveAndFlush(
+        var user = appUserRepository.saveAndFlush(
                 createAppUser("test123@example.com")
         );
 
-        var wallet = walletRepository.saveAndFlush(Wallet.create(appUser));
+        var wallet = walletRepository.saveAndFlush(Wallet.create(user));
+
+        mockAuthenticatedUser(user);
 
         Assertions.assertThrows(
-                InvalidAmountException.class, () -> transactionService.createDeposit(
+                InvalidAmountException.class,
+                () -> transactionService.createDeposit(
                         wallet.getId(),
                         amount,
                         "deposit-idempotency-key"
                 )
         );
 
+        Assertions.assertEquals(0, transactionRepository.count());
+
+        var updatedWallet = walletRepository
+                .findById(wallet.getId())
+                .orElseThrow();
+
         Assertions.assertEquals(
                 0,
-                transactionRepository.count()
-        );
-
-        var walletUpdated = walletRepository.findById(wallet.getId()).orElseThrow();
-
-        Assertions.assertEquals(
-                0,
-                BigDecimal.ZERO.compareTo(walletUpdated.getBalance())
+                BigDecimal.ZERO.compareTo(updatedWallet.getBalance())
         );
     }
 
     private void assertInvalidIdempotencyKey(String idempotencyKey) {
-        var sourceAppUser = appUserRepository.saveAndFlush(
+        var sourceUser = appUserRepository.saveAndFlush(
                 createAppUser("test123@example.com")
         );
-        var destinationAppUser = appUserRepository.saveAndFlush(
+
+        var destinationUser = appUserRepository.saveAndFlush(
                 createAppUser("test321@example.com")
         );
 
-        var walletSource = Wallet.create(sourceAppUser);
-        walletSource.deposit(BigDecimal.valueOf(100.00));
-        walletRepository.saveAndFlush(walletSource);
-        var walletDestination = walletRepository.saveAndFlush(Wallet.create(destinationAppUser));
+        var sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(100.00));
+        walletRepository.saveAndFlush(sourceWallet);
+
+        var destinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        mockAuthenticatedUser(sourceUser);
 
         Assertions.assertThrows(
-                InvalidIdempotencyKeyException.class, () -> transactionService.createTransfer(
-                        walletSource.getId(),
-                        walletDestination.getId(),
+                InvalidIdempotencyKeyException.class,
+                () -> transactionService.createTransfer(
+                        sourceWallet.getId(),
+                        destinationWallet.getId(),
                         BigDecimal.valueOf(30.00),
                         idempotencyKey
                 )
         );
 
         Assertions.assertEquals(0, transactionRepository.count());
+
         Assertions.assertEquals(
                 0,
-                BigDecimal.ZERO.compareTo(walletDestination.getBalance())
+                BigDecimal.ZERO.compareTo(destinationWallet.getBalance())
         );
 
         Assertions.assertEquals(
                 0,
-                BigDecimal.valueOf(100.00).compareTo(walletSource.getBalance())
+                BigDecimal.valueOf(100.00)
+                        .compareTo(sourceWallet.getBalance())
         );
     }
 
+    private void mockAuthenticatedUser(AppUser user) {
+        Mockito.when(authenticatedUserProvider.getUserId())
+                .thenReturn(user.getId());
+    }
 
     private AppUser createAppUser(String email) {
-        return AppUser.create("test user", email, "hashedPassword");
+        return AppUser.create(
+                "test user",
+                email,
+                "hashedPassword"
+        );
     }
 }
