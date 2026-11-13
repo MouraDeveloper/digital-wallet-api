@@ -1,3 +1,4 @@
+
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.badRequest.InvalidIdempotencyKeyException;
@@ -22,7 +23,6 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
-
 @Service
 @RequiredArgsConstructor
 public class TransactionService {
@@ -31,7 +31,6 @@ public class TransactionService {
     private final WalletRepository walletRepository;
     private final TransactionMapper transactionMapper;
     private final AuthenticatedUserProvider authenticatedUserProvider;
-
 
     @Transactional
     public TransactionDto.Response createTransfer(
@@ -106,26 +105,70 @@ public class TransactionService {
 
     @Transactional(readOnly = true)
     public TransactionDto.Response findById(Long transactionId) {
-        return transactionMapper.toResponse(findTransactionOrThrow(transactionId));
+        Transaction transaction = findTransactionOrThrow(transactionId);
+
+        UUID authenticatedUserId = authenticatedUserProvider.getUserId();
+
+        UUID destinationOwnerId = transaction.getDestinationWallet()
+                .getUser()
+                .getId();
+
+        boolean isDestinationOwner = authenticatedUserId.equals(destinationOwnerId);
+
+        boolean isSourceOwner =
+                transaction.getType() == TypeEnum.TRANSFER
+                        && authenticatedUserId.equals(
+                        transaction.getSourceWallet()
+                                .getUser()
+                                .getId()
+                );
+
+        boolean canViewDeposit =
+                transaction.getType() == TypeEnum.DEPOSIT
+                        && isDestinationOwner;
+
+        boolean canViewTransfer =
+                transaction.getType() == TypeEnum.TRANSFER
+                        && (isSourceOwner || isDestinationOwner);
+
+        if (!canViewDeposit && !canViewTransfer) {
+            throw new WalletAccessDeniedException(
+                    transaction.getDestinationWallet().getId()
+            );
+        }
+
+        return transactionMapper.toResponse(transaction);
     }
 
     @Transactional(readOnly = true)
     public List<TransactionDto.Response> findByWalletId(UUID walletId) {
-        findWalletOrThrow(walletId);
+        Wallet wallet = findWalletOrThrow(walletId);
 
-        return transactionRepository.findBySourceWallet_IdOrDestinationWallet_Id(walletId, walletId)
+        UUID ownerId = wallet.getUser().getId();
+
+        if (!authenticatedUserProvider.getUserId().equals(ownerId)) {
+            throw new WalletAccessDeniedException(walletId);
+        }
+
+        return transactionRepository
+                .findBySourceWallet_IdOrDestinationWallet_Id(walletId, walletId)
                 .stream()
                 .map(transactionMapper::toResponse)
                 .toList();
     }
 
     @Transactional
-    public TransactionDto.Response createDeposit(UUID destinationWalletId, BigDecimal amount, String idempotencyKey) {
+    public TransactionDto.Response createDeposit(
+            UUID destinationWalletId,
+            BigDecimal amount,
+            String idempotencyKey
+    ) {
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
             throw new InvalidIdempotencyKeyException();
         }
 
-        var existingTransaction = transactionRepository.findByIdempotencyKey(idempotencyKey);
+        var existingTransaction =
+                transactionRepository.findByIdempotencyKey(idempotencyKey);
 
         if (existingTransaction.isPresent()) {
             return validateExistingDeposit(
@@ -136,6 +179,12 @@ public class TransactionService {
         }
 
         var destinationWallet = findWalletForUpdateOrThrow(destinationWalletId);
+
+        var ownerId = destinationWallet.getUser().getId();
+
+        if (!authenticatedUserProvider.getUserId().equals(ownerId)) {
+            throw new WalletAccessDeniedException(destinationWallet.getId());
+        }
 
         var existingTransactionAfterLock =
                 transactionRepository.findByIdempotencyKey(idempotencyKey);
@@ -148,14 +197,18 @@ public class TransactionService {
             );
         }
 
-        var transaction = Transaction.deposit(destinationWallet, amount, idempotencyKey);
+        var transaction = Transaction.deposit(
+                destinationWallet,
+                amount,
+                idempotencyKey
+        );
+
         destinationWallet.deposit(amount);
 
         var transactionSaved = transactionRepository.save(transaction);
 
         return transactionMapper.toResponse(transactionSaved);
     }
-
 
     private Wallet findWalletOrThrow(UUID walletId) {
         return walletRepository.findById(walletId)
@@ -178,31 +231,40 @@ public class TransactionService {
                 );
     }
 
-
     private TransactionDto.Response validateExistingDeposit(
             Transaction existingTransaction,
             UUID destinationWalletId,
             BigDecimal amount
     ) {
-        boolean sameType =
-                existingTransaction.getType() == TypeEnum.DEPOSIT;
+        boolean sameType = existingTransaction.getType() == TypeEnum.DEPOSIT;
 
-        boolean sameDestination =
-                existingTransaction.getDestinationWallet()
-                        .getId()
-                        .equals(destinationWalletId);
+        if (!sameType) {
+            throw new IdempotencyConflictException();
+        }
 
-        boolean sameAmount =
-                existingTransaction.getAmount()
-                        .compareTo(amount) == 0;
+        UUID ownerId = existingTransaction.getDestinationWallet()
+                .getUser()
+                .getId();
 
-        if (!sameType || !sameDestination || !sameAmount) {
+        if (!authenticatedUserProvider.getUserId().equals(ownerId)) {
+            throw new WalletAccessDeniedException(
+                    existingTransaction.getDestinationWallet().getId()
+            );
+        }
+
+        boolean sameDestination = existingTransaction.getDestinationWallet()
+                .getId()
+                .equals(destinationWalletId);
+
+        boolean sameAmount = existingTransaction.getAmount()
+                .compareTo(amount) == 0;
+
+        if (!sameDestination || !sameAmount) {
             throw new IdempotencyConflictException();
         }
 
         return transactionMapper.toResponse(existingTransaction);
     }
-
 
     private TransactionDto.Response validateExistingTransfer(
             Transaction existingTransaction,
@@ -214,10 +276,14 @@ public class TransactionService {
             throw new IdempotencyConflictException();
         }
 
-        var ownerId = existingTransaction.getSourceWallet().getUser().getId();
+        var ownerId = existingTransaction.getSourceWallet()
+                .getUser()
+                .getId();
 
         if (!authenticatedUserProvider.getUserId().equals(ownerId)) {
-            throw new WalletAccessDeniedException(existingTransaction.getSourceWallet().getId());
+            throw new WalletAccessDeniedException(
+                    existingTransaction.getSourceWallet().getId()
+            );
         }
 
         boolean sameSource =
