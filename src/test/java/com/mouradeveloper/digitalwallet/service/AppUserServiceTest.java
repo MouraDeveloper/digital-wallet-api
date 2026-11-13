@@ -1,3 +1,4 @@
+
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.conflict.EmailAlreadyExistsException;
@@ -8,6 +9,8 @@ import com.mouradeveloper.digitalwallet.models.entity.AppUser;
 import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
+import com.mouradeveloper.digitalwallet.security.AuthenticatedUserProvider;
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -35,9 +39,11 @@ public class AppUserServiceTest {
     @Mock
     private AppUserMapper appUserMapper;
 
+    @Mock
+    private AuthenticatedUserProvider authenticatedUserProvider;
+
     @InjectMocks
     private AppUserService appUserService;
-
 
     @Test
     void shouldCreateUserAndWalletWhenEmailDoesNotExist() {
@@ -58,7 +64,6 @@ public class AppUserServiceTest {
 
         mockAppUserSaved(user);
 
-
         var wallet = Wallet.create(user);
 
         mockWalletSaved(wallet);
@@ -68,8 +73,10 @@ public class AppUserServiceTest {
         Mockito.when(appUserMapper.toResponse(Mockito.same(user)))
                 .thenReturn(expectedResponse);
 
-
-        Assertions.assertEquals(expectedResponse, appUserService.createUser(request));
+        Assertions.assertEquals(
+                expectedResponse,
+                appUserService.createUser(request)
+        );
 
         Mockito.verify(walletRepository)
                 .save(Mockito.any(Wallet.class));
@@ -80,12 +87,17 @@ public class AppUserServiceTest {
 
     @Test
     void shouldThrowEmailAlreadyExistsExceptionWhenEmailAlreadyExists() {
-        var request = createAppUserRequest("John Doe", "john.doe@example.com", "password123");
+        var request = createAppUserRequest(
+                "John Doe",
+                "john.doe@example.com",
+                "password123"
+        );
 
         mockEmailDoesExist(request.email());
 
         Assertions.assertThrows(
-                EmailAlreadyExistsException.class, () -> appUserService.createUser(request)
+                EmailAlreadyExistsException.class,
+                () -> appUserService.createUser(request)
         );
 
         Mockito.verify(passwordEncoder, Mockito.never())
@@ -100,15 +112,25 @@ public class AppUserServiceTest {
 
     @Test
     void shouldReturnUserWhenUserExists() {
-        var appUserId = UUID.randomUUID();
+        UUID appUserId = UUID.randomUUID();
+
         var appUserRequest = createAppUserRequest(
                 "Jane Doe",
                 "janedoe@gmail.com",
                 "password123"
         );
-        var appUser = createAppUser(appUserRequest, "encodedPassword");
+
+        var appUser = createAppUser(
+                appUserRequest,
+                "encodedPassword"
+        );
+
+        ReflectionTestUtils.setField(appUser, "id", appUserId);
 
         mockUserFoundById(appUserId, appUser);
+
+        Mockito.when(authenticatedUserProvider.getUserId())
+                .thenReturn(appUserId);
 
         var appUserDtoResponse = createAppUserResponse(appUser);
 
@@ -119,6 +141,8 @@ public class AppUserServiceTest {
         Assertions.assertEquals(appUserDtoResponse, userService);
 
         verifyUserFoundById(appUserId);
+
+        Mockito.verify(authenticatedUserProvider).getUserId();
     }
 
     @Test
@@ -128,12 +152,13 @@ public class AppUserServiceTest {
         mockUserFoundByIdEmpty(appUserId);
 
         Assertions.assertThrows(
-                AppUserNotFoundException.class, () -> appUserService.findById(appUserId)
+                AppUserNotFoundException.class,
+                () -> appUserService.findById(appUserId)
         );
 
-        Mockito.verify(appUserMapper, Mockito.never()).toResponse(Mockito.any(AppUser.class));
+        Mockito.verify(appUserMapper, Mockito.never())
+                .toResponse(Mockito.any(AppUser.class));
     }
-
 
     private void mockWalletSaved(Wallet wallet) {
         Mockito.when(walletRepository.save(Mockito.any(Wallet.class)))
@@ -145,7 +170,11 @@ public class AppUserServiceTest {
                 .thenReturn(appUser);
     }
 
-    private AppUserDto.Request createAppUserRequest(String fullName, String email, String password) {
+    private AppUserDto.Request createAppUserRequest(
+            String fullName,
+            String email,
+            String password
+    ) {
         return new AppUserDto.Request(
                 fullName,
                 email,
@@ -153,7 +182,10 @@ public class AppUserServiceTest {
         );
     }
 
-    private AppUser createAppUser(AppUserDto.Request request, String encodedPassword) {
+    private AppUser createAppUser(
+            AppUserDto.Request request,
+            String encodedPassword
+    ) {
         return AppUser.create(
                 request.fullName(),
                 request.email(),
@@ -190,7 +222,10 @@ public class AppUserServiceTest {
                 .thenReturn(Optional.empty());
     }
 
-    private void mockUserToResponse(AppUser appUser, AppUserDto.Response response) {
+    private void mockUserToResponse(
+            AppUser appUser,
+            AppUserDto.Response response
+    ) {
         Mockito.when(appUserMapper.toResponse(Mockito.same(appUser)))
                 .thenReturn(response);
     }
