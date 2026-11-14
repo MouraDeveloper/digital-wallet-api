@@ -3,6 +3,8 @@ package com.mouradeveloper.digitalwallet.controller;
 import com.mouradeveloper.digitalwallet.models.dto.auth.Login;
 import com.mouradeveloper.digitalwallet.security.CustomUserDetails;
 import com.mouradeveloper.digitalwallet.security.TokenProvider;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,12 +19,20 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
+@Tag(
+        name = "Authentication",
+        description = "User authentication and JWT issuance"
+)
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
     private final TokenProvider tokenProvider;
 
 
+    @Operation(
+            summary = "Authenticate user",
+            description = "Validates user credentials and returns a JWT"
+    )
     @PostMapping("/login")
     public ResponseEntity<Login.Response> login(
             @RequestBody @Valid Login.Request loginRequest
