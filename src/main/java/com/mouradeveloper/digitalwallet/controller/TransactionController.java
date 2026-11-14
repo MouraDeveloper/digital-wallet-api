@@ -4,6 +4,7 @@ import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.models.dto.error.StandardError;
 import com.mouradeveloper.digitalwallet.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -88,10 +89,18 @@ public class TransactionController {
                     )
             )
     })
-    @Operation(summary = "Transfer funds between wallets")
+    @Operation(
+            summary = "Transfer funds between wallets",
+            description = "Requires an Idempotency-Key to prevent duplicate transfers."
+    )
     @PostMapping("/create-transfer")
     public ResponseEntity<TransactionDto.Response> createTransfer(
             @RequestBody @Valid TransactionDto.TransferRequest transferRequest,
+
+            @Parameter(
+                    description = "Unique key to prevent duplicate transfers",
+                    example = "transfer-001"
+            )
             @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -230,10 +239,18 @@ public class TransactionController {
                     )
             )
     })
-    @Operation(summary = "Deposit funds into a wallet")
+    @Operation(
+            summary = "Deposit funds into a wallet",
+            description = "Requires an Idempotency-Key to prevent duplicate deposits."
+    )
     @PostMapping("/create-deposit")
     public ResponseEntity<TransactionDto.Response> createDeposit(
             @RequestBody @Valid TransactionDto.DepositRequest depositRequest,
+
+            @Parameter(
+                    description = "Unique key to prevent duplicate deposits",
+                    example = "deposit-001"
+            )
             @RequestHeader("Idempotency-Key") String idempotencyKey
     ) {
         return ResponseEntity.status(HttpStatus.CREATED)
