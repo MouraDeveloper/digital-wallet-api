@@ -93,15 +93,6 @@ Transfers are processed within a database transaction, with balance validation a
 
 *Receiver wallet balance after transfer — 50.00.*
 
-### 5. Idempotency
-
-Deposits and transfers require an `Idempotency-Key` header to prevent duplicate operations.
-
-Repeating a request with the same key and data returns the original transaction without changing wallet balances again.
-
-Reusing the same key with different transaction data returns HTTP 409 Conflict.
-
-
 
 ### 5. Idempotency
 
