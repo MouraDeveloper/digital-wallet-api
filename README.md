@@ -131,3 +131,148 @@ Reusing the same `Idempotency-Key` with different request data returns HTTP 409 
 | POST | `/transactions/create-transfer` | Transfer funds between wallets |
 | GET | `/transactions/{id}` | Get transaction by ID |
 | GET | `/transactions/wallet/{walletId}` | Get wallet transaction history |
+
+
+## Getting Started
+
+### Prerequisites
+
+- Java 21
+- PostgreSQL 17
+- Git
+- Docker or OrbStack (for PostgreSQL and integration tests)
+
+
+### Database Setup
+
+The application uses PostgreSQL 17 as its database.
+
+You can start a PostgreSQL container using Docker:
+
+```bash
+docker run -d \
+  --name wallet-postgres \
+  -e POSTGRES_DB=wallet \
+  -e POSTGRES_USER=wallet \
+  -e POSTGRES_PASSWORD=your_password \
+  -p 5433:5432 \
+  -v wallet_data:/var/lib/postgresql/data \
+  postgres:17
+```
+
+The database will be available at `localhost:5433`, with the name `wallet`.
+
+Flyway automatically applies the database migrations when the application starts.
+
+
+### Environment Variables
+
+The application requires the following environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `DB_USERNAME` | PostgreSQL username |
+| `DB_PASSWORD` | PostgreSQL password |
+| `JWT_SECRET` | Secret key used to sign JWTs |
+| `JWT_EXPIRATION` | JWT expiration time in seconds (e.g., 3600 for 1 hour) |
+
+**macOS and Linux**
+
+```bash
+export DB_USERNAME=wallet
+export DB_PASSWORD=your_password
+export JWT_EXPIRATION=3600
+```
+
+**Windows (PowerShell)**
+
+```powershell
+$env:DB_USERNAME = "wallet"
+$env:DB_PASSWORD = "your_password"
+$env:JWT_EXPIRATION = "3600"
+```
+
+Replace `your_password` with the password configured for PostgreSQL.
+
+Run these commands in the same terminal session used to start the application.
+
+### Generating a JWT Secret
+
+The application uses HMAC256 to sign JWTs. Generate a secure random secret before starting the application.
+
+**macOS and Linux**
+
+```bash
+export JWT_SECRET="$(openssl rand -hex 32)"
+```
+
+**Windows (PowerShell)**
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+$env:JWT_SECRET = [BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+```
+
+Both commands generate a cryptographically secure 256-bit secret and set the `JWT_SECRET` environment variable.
+
+Never commit passwords or JWT secrets to the repository.
+
+
+### Running the Application
+
+Clone the repository:
+
+```bash
+git clone https://github.com/MouraDeveloper/digital-wallet-api.git
+cd digital-wallet-api
+```
+
+Make sure PostgreSQL is running and the required environment variables are configured.
+
+Start the application using the Maven Wrapper:
+
+```bash
+./mvnw spring-boot:run
+```
+
+
+On Windows:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+The API will be available at `http://localhost:8080`.
+
+Access the Swagger UI at:
+
+http://localhost:8080/swagger-ui/index.html
+
+Flyway automatically runs the database migrations during application startup.
+
+## Running Tests
+
+The project includes unit and integration tests covering business rules, persistence, and API endpoints.
+
+Integration tests use Testcontainers to run PostgreSQL 17 in an isolated environment, without requiring a manually configured test database.
+
+To run the test suite on macOS or Linux:
+
+```bash
+./mvnw test
+```
+
+On Windows:
+
+```powershell
+.\mvnw.cmd test
+```
+
+The current test suite contains 103 tests, including unit and integration tests.
+
+<img width="1171" height="258" alt="Test execution showing 103 passing tests" src="https://github.com/user-attachments/assets/86a3a556-af80-475b-974f-875c5e682272" />
+
+*Test execution — 103 tests passed, BUILD SUCCESS.*
