@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.models.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,6 +9,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 public final class AppUserDto {
+
+    @Schema(name = "AppUserRequest")
     public record Request(
             @NotBlank(message = "Full name cannot be blank")
             @Size(
@@ -33,6 +36,7 @@ public final class AppUserDto {
     ) {
     }
 
+    @Schema(name = "AppUserResponse")
     public record Response(
             UUID id,
             String fullName,

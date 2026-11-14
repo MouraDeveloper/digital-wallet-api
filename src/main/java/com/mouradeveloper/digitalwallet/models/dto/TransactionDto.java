@@ -1,6 +1,7 @@
 package com.mouradeveloper.digitalwallet.models.dto;
 
 import com.mouradeveloper.digitalwallet.models.enums.TypeEnum;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
@@ -36,6 +37,7 @@ public final class TransactionDto {
     ){}
 
 
+    @Schema(name = "TransactionResponse")
     public record Response(
             Long id,
             TypeEnum type,
