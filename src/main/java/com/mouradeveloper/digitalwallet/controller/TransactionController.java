@@ -2,6 +2,7 @@ package com.mouradeveloper.digitalwallet.controller;
 
 import com.mouradeveloper.digitalwallet.models.dto.TransactionDto;
 import com.mouradeveloper.digitalwallet.service.TransactionService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/transactions")
 @RequiredArgsConstructor
+@SecurityRequirement(name = "bearerAuth")
 public class TransactionController {
 
     private final TransactionService transactionService;

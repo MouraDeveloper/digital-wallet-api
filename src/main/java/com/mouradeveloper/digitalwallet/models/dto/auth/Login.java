@@ -1,5 +1,6 @@
 package com.mouradeveloper.digitalwallet.models.dto.auth;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -8,6 +9,7 @@ public final class Login {
     private Login() {
     }
 
+    @Schema(name = "LoginRequest")
     public record Request(
             @NotBlank(message = "Email cannot be blank")
             @Email(message = "Email should be valid")
@@ -26,6 +28,7 @@ public final class Login {
     ) {
     }
 
+    @Schema(name = "LoginResponse")
     public record Response(
             String token
     ) {
