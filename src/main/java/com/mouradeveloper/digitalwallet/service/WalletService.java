@@ -33,6 +33,15 @@ public class WalletService {
         return walletMapper.toResponse(wallet);
     }
 
+    @Transactional(readOnly = true)
+    public WalletDto.Response findMyWallet() {
+        UUID userId = authenticatedUserProvider.getUserId();
+
+        return walletRepository.findByUser_Id(userId)
+                .map(walletMapper::toResponse)
+                .orElseThrow(WalletNotFoundException::new);
+    }
+
 
     private Wallet findWalletOrThrow(UUID walletId) {
         return walletRepository.findById(walletId)

@@ -1,3 +1,4 @@
+
 package com.mouradeveloper.digitalwallet.controller;
 
 import com.mouradeveloper.digitalwallet.models.dto.auth.Login;
@@ -66,6 +67,7 @@ public class WalletControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+
     @Test
     @Transactional
     void shouldFindWalletByIdAndReturnOk() throws Exception {
@@ -108,6 +110,58 @@ public class WalletControllerIntegrationTest {
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.timestamp").exists())
                 .andExpect(jsonPath("$.path").value("/wallets/" + uuid))
+                .andExpect(jsonPath("$.error").value("Not Found"));
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnAuthenticatedUserWallet() throws Exception {
+        AppUser user = createAppUser("wallet-me@example.com");
+        AppUser savedUser = appUserRepository.saveAndFlush(user);
+
+        Wallet wallet = Wallet.create(savedUser);
+        Wallet savedWallet = walletRepository.saveAndFlush(wallet);
+
+        String token = login(savedUser.getEmail());
+
+        mockMvc.perform(get("/wallets/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id")
+                        .value(savedWallet.getId().toString()))
+                .andExpect(jsonPath("$.userId")
+                        .value(savedUser.getId().toString()))
+                .andExpect(jsonPath("$.balance")
+                        .value(savedWallet.getBalance().doubleValue()))
+                .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    void shouldReturnUnauthorizedWhenAccessingMyWalletWithoutToken()
+            throws Exception {
+
+        mockMvc.perform(get("/wallets/me"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnNotFoundWhenAuthenticatedUserHasNoWallet()
+            throws Exception {
+
+        AppUser user = createAppUser("no-wallet@example.com");
+        AppUser savedUser = appUserRepository.saveAndFlush(user);
+
+        String token = login(savedUser.getEmail());
+
+        mockMvc.perform(get("/wallets/me")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message")
+                        .value("Wallet not found for authenticated user."))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.path").value("/wallets/me"))
                 .andExpect(jsonPath("$.error").value("Not Found"));
     }
 

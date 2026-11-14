@@ -24,4 +24,9 @@ public class WalletController {
     ) {
         return ResponseEntity.ok(walletService.findById(id));
     }
+
+    @GetMapping("/me")
+    public ResponseEntity<WalletDto.Response> findMyWallet() {
+        return ResponseEntity.ok(walletService.findMyWallet());
+    }
 }
