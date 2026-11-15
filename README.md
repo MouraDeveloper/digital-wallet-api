@@ -271,8 +271,9 @@ On Windows:
 .\mvnw.cmd test
 ```
 
-The current test suite contains 103 tests, including unit and integration tests.
+The current test suite contains 111 tests, including unit and integration tests.
 
-<img width="1171" height="258" alt="Test execution showing 103 passing tests" src="https://github.com/user-attachments/assets/86a3a556-af80-475b-974f-875c5e682272" />
+<img width="745" height="202" alt="Screenshot 2026-11-15 at 11 33 23" src="https://github.com/user-attachments/assets/8d81aa99-7ac4-44a1-8015-c5fde4b76166" />
 
-*Test execution — 103 tests passed, BUILD SUCCESS.*
+
+*Test execution — 111 tests passed, BUILD SUCCESS.*
