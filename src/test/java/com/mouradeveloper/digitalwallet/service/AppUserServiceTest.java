@@ -1,4 +1,3 @@
-
 package com.mouradeveloper.digitalwallet.service;
 
 import com.mouradeveloper.digitalwallet.exception.conflict.EmailAlreadyExistsException;
@@ -10,7 +9,6 @@ import com.mouradeveloper.digitalwallet.models.entity.Wallet;
 import com.mouradeveloper.digitalwallet.repository.AppUserRepository;
 import com.mouradeveloper.digitalwallet.repository.WalletRepository;
 import com.mouradeveloper.digitalwallet.security.AuthenticatedUserProvider;
-
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -18,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -155,6 +154,46 @@ public class AppUserServiceTest {
                 AppUserNotFoundException.class,
                 () -> appUserService.findById(appUserId)
         );
+
+        Mockito.verify(appUserMapper, Mockito.never())
+                .toResponse(Mockito.any(AppUser.class));
+    }
+
+    @Test
+    void shouldDenyAccessToAnotherUsersProfile() {
+        UUID authenticatedUserId = UUID.randomUUID();
+        UUID requestedUserId = UUID.randomUUID();
+
+        var request = createAppUserRequest(
+                "John Doe",
+                "john.doe@example.com",
+                "password123"
+        );
+
+        var requestedUser = createAppUser(
+                request,
+                "encodedPassword"
+        );
+
+        ReflectionTestUtils.setField(
+                requestedUser,
+                "id",
+                requestedUserId
+        );
+
+        mockUserFoundById(requestedUserId, requestedUser);
+
+        Mockito.when(authenticatedUserProvider.getUserId())
+                .thenReturn(authenticatedUserId);
+
+        Assertions.assertThrows(
+                AccessDeniedException.class,
+                () -> appUserService.findById(requestedUserId)
+        );
+
+        verifyUserFoundById(requestedUserId);
+
+        Mockito.verify(authenticatedUserProvider).getUserId();
 
         Mockito.verify(appUserMapper, Mockito.never())
                 .toResponse(Mockito.any(AppUser.class));

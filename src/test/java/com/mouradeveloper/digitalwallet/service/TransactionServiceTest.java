@@ -3,6 +3,7 @@ package com.mouradeveloper.digitalwallet.service;
 import com.mouradeveloper.digitalwallet.exception.business.InsufficientFundsException;
 import com.mouradeveloper.digitalwallet.exception.business.InvalidAmountException;
 import com.mouradeveloper.digitalwallet.exception.business.SameWalletTransferException;
+import com.mouradeveloper.digitalwallet.exception.forbidden.WalletAccessDeniedException;
 import com.mouradeveloper.digitalwallet.exception.notFound.TransactionNotFoundException;
 import com.mouradeveloper.digitalwallet.exception.notFound.WalletNotFoundException;
 import com.mouradeveloper.digitalwallet.mapper.TransactionMapper;
@@ -267,6 +268,40 @@ public class TransactionServiceTest {
     }
 
     @Test
+    void shouldDenyAccessToAnotherUsersTransaction() {
+        Long transactionId = 1L;
+
+        Wallet wallet = createWallet(createAppUser());
+
+        Transaction transaction = Transaction.deposit(
+                wallet,
+                BigDecimal.valueOf(100.00),
+                "test-idempotency-key"
+        );
+
+        mockTransaction(transactionId, transaction);
+
+        UUID authenticatedUserId = UUID.randomUUID();
+
+        Mockito.when(authenticatedUserProvider.getUserId())
+                .thenReturn(authenticatedUserId);
+
+        Assertions.assertNotEquals(
+                wallet.getUser().getId(),
+                authenticatedUserId
+        );
+
+        Assertions.assertThrows(
+                WalletAccessDeniedException.class,
+                () -> transactionService.findById(transactionId)
+        );
+
+        Mockito.verify(transactionRepository).findById(transactionId);
+
+        Mockito.verifyNoInteractions(transactionMapper);
+    }
+
+    @Test
     void shouldThrowTransactionNotFoundExceptionWhenTransactionDoesNotExist() {
         var transactionId = 1L;
 
@@ -315,6 +350,34 @@ public class TransactionServiceTest {
                 List.of(transactionDto1, transactionDto2),
                 response
         );
+    }
+
+    @Test
+    void shouldDenyAccessToAnotherUsersWalletHistory() {
+        UUID walletId = UUID.randomUUID();
+        UUID authenticatedUserId = UUID.randomUUID();
+
+        Wallet wallet = createWallet(createAppUser());
+
+        mockWalletSource(walletId, wallet);
+
+        Mockito.when(authenticatedUserProvider.getUserId())
+                .thenReturn(authenticatedUserId);
+
+        Assertions.assertNotEquals(
+                wallet.getUser().getId(),
+                authenticatedUserId
+        );
+
+        Assertions.assertThrows(
+                WalletAccessDeniedException.class,
+                () -> transactionService.findByWalletId(walletId)
+        );
+
+        Mockito.verify(walletRepository).findById(walletId);
+
+        Mockito.verifyNoInteractions(transactionRepository);
+        Mockito.verifyNoInteractions(transactionMapper);
     }
 
     @Test
