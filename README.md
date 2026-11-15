@@ -138,10 +138,9 @@ Reusing the same `Idempotency-Key` with different request data returns HTTP 409 
 ### Prerequisites
 
 - Java 21
-- PostgreSQL 17
 - Git
-- Docker or OrbStack (for PostgreSQL and integration tests)
-
+- Docker or OrbStack (required for integration tests)
+- PostgreSQL 17 (installed locally or running in a Docker container)
 
 ### Database Setup
 
@@ -155,7 +154,7 @@ docker run -d \
   -e POSTGRES_DB=wallet \
   -e POSTGRES_USER=wallet \
   -e POSTGRES_PASSWORD=your_password \
-  -p 5433:5432 \
+  -p 127.0.0.1:5433:5432 \
   -v wallet_data:/var/lib/postgresql/data \
   postgres:17
 ```
@@ -175,6 +174,8 @@ The application requires the following environment variables:
 | `DB_PASSWORD` | PostgreSQL password |
 | `JWT_SECRET` | Secret key used to sign JWTs |
 | `JWT_EXPIRATION` | JWT expiration time in seconds (e.g., 3600 for 1 hour) |
+
+The `JWT_SECRET` must be generated before starting the application. See the **Generating a JWT Secret** section below.
 
 **macOS and Linux**
 
@@ -277,3 +278,53 @@ The current test suite contains 111 tests, including unit and integration tests.
 
 
 *Test execution — 111 tests passed, BUILD SUCCESS.*
+
+## Technical Decisions
+
+The following decisions were made to improve data consistency, security, and reliability.
+
+### Transaction Management
+
+Deposits and transfers use Spring's `@Transactional` to ensure atomic operations. If an operation fails, database changes are rolled back, preventing partial balance updates.
+
+### Monetary Precision
+
+Monetary values use Java's `BigDecimal` and PostgreSQL's `NUMERIC(12,2)` instead of floating-point types such as `double`. This avoids binary floating-point precision issues and provides fixed decimal precision for wallet balances and transaction amounts.
+
+### Concurrency Control
+
+Wallet operations use pessimistic database locking to prevent conflicting balance updates from concurrent requests.
+
+Pessimistic locking was chosen to serialize conflicting balance updates at the database level, avoiding the retry logic that optimistic locking may require when multiple transactions access the same wallet.
+
+During transfers, wallet locks are acquired in a consistent UUID order to reduce the risk of deadlocks.
+
+### Idempotency
+
+Deposits and transfers require an `Idempotency-Key` header to prevent duplicate processing.
+
+Repeated requests with the same key and matching data return the existing transaction without modifying balances again. Reusing the key with different request data returns HTTP 409 Conflict.
+
+The API preserves the original HTTP 201 Created status on successful retries. Returning HTTP 200 OK for repeated requests is an alternative design.
+
+### Transaction History
+
+Transaction records are designed as append-only history to preserve traceability of deposits and transfers.
+
+The application does not expose transaction update or deletion endpoints, and JPA mappings mark transaction fields as non-updatable. These restrictions are enforced at the application/ORM level rather than through database-level immutability controls.
+
+### Authentication and Authorization
+
+Spring Security and JWT provide stateless authentication.
+
+Resource ownership is validated in the service layer to prevent unauthorized access and mitigate IDOR vulnerabilities.
+
+Unauthorized access to another user's resources returns HTTP 403 Forbidden. Returning HTTP 404 Not Found is an alternative approach when hiding resource existence is a priority.
+
+### Database and Testing Strategy
+
+PostgreSQL is used for both application development and integration testing, avoiding behavioral differences introduced by in-memory databases.
+
+Flyway manages database schema migrations, while Testcontainers provides isolated PostgreSQL instances for integration tests.
+
+The automated suite contains 111 unit and integration tests covering business rules, transaction behavior, persistence, and HTTP authorization.
