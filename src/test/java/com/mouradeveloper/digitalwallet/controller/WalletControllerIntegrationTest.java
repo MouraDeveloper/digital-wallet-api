@@ -67,7 +67,6 @@ public class WalletControllerIntegrationTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-
     @Test
     @Transactional
     void shouldFindWalletByIdAndReturnOk() throws Exception {
@@ -90,6 +89,25 @@ public class WalletControllerIntegrationTest {
                 .andExpect(jsonPath("$.balance")
                         .value(savedWallet.getBalance().doubleValue()))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnForbiddenWhenAccessingAnotherUsersWallet() throws Exception {
+        AppUser userA = createAppUser("user-a@example.com");
+        AppUser savedUserA = appUserRepository.saveAndFlush(userA);
+
+        AppUser userB = createAppUser("user-b@example.com");
+        AppUser savedUserB = appUserRepository.saveAndFlush(userB);
+
+        Wallet walletB = Wallet.create(savedUserB);
+        Wallet savedWalletB = walletRepository.saveAndFlush(walletB);
+
+        String tokenA = login(savedUserA.getEmail());
+
+        mockMvc.perform(get("/wallets/{id}", savedWalletB.getId())
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isForbidden());
     }
 
     @Test

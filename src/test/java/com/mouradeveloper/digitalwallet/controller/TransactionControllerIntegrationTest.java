@@ -188,6 +188,47 @@ public class TransactionControllerIntegrationTest {
 
     @Test
     @Transactional
+    void shouldReturnForbiddenWhenAccessingAnotherUsersTransaction() throws Exception {
+        AppUser sourceUser = appUserRepository.saveAndFlush(
+                createUser("idor-source@example.com")
+        );
+
+        AppUser destinationUser = appUserRepository.saveAndFlush(
+                createUser("idor-destination@example.com")
+        );
+
+        AppUser unauthorizedUser = appUserRepository.saveAndFlush(
+                createUser("idor-outsider@example.com")
+        );
+
+        Wallet sourceWallet = Wallet.create(sourceUser);
+        sourceWallet.deposit(BigDecimal.valueOf(200));
+
+        Wallet savedSourceWallet = walletRepository.saveAndFlush(sourceWallet);
+
+        Wallet savedDestinationWallet = walletRepository.saveAndFlush(
+                Wallet.create(destinationUser)
+        );
+
+        Transaction transaction = Transaction.transfer(
+                savedSourceWallet,
+                savedDestinationWallet,
+                BigDecimal.valueOf(50),
+                "idor-transaction-key"
+        );
+
+        Transaction savedTransaction = transactionRepository.saveAndFlush(transaction);
+
+        String token = login(unauthorizedUser.getEmail());
+
+        mockMvc.perform(get("/transactions/{id}", savedTransaction.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+    }
+
+
+    @Test
+    @Transactional
     void shouldFindTransactionsByWalletIdAndReturnOk() throws Exception {
         var sourceUser = appUserRepository.saveAndFlush(
                 createUser("source@gmail.com")
@@ -232,6 +273,36 @@ public class TransactionControllerIntegrationTest {
                         .value(savedDestinationWallet.getId().toString()))
                 .andExpect(jsonPath("$[0].amount").value(100))
                 .andExpect(jsonPath("$[0].createdAt").exists());
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnForbiddenWhenAccessingAnotherUsersWalletHistory() throws Exception {
+        AppUser walletOwner = appUserRepository.saveAndFlush(
+                createUser("idor-history-owner@example.com")
+        );
+
+        AppUser unauthorizedUser = appUserRepository.saveAndFlush(
+                createUser("idor-history-outsider@example.com")
+        );
+
+        Wallet savedWallet = walletRepository.saveAndFlush(
+                Wallet.create(walletOwner)
+        );
+
+        Transaction deposit = Transaction.deposit(
+                savedWallet,
+                BigDecimal.valueOf(75),
+                "idor-history-deposit-key"
+        );
+
+        transactionRepository.saveAndFlush(deposit);
+
+        String token = login(unauthorizedUser.getEmail());
+
+        mockMvc.perform(get("/transactions/wallet/{walletId}", savedWallet.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
     }
 
     @Test

@@ -1,3 +1,4 @@
+
 package com.mouradeveloper.digitalwallet.controller;
 
 import com.mouradeveloper.digitalwallet.models.dto.AppUserDto;
@@ -161,6 +162,22 @@ public class AppUserControllerIntegrationTest {
                 .andExpect(jsonPath("$.email")
                         .value(savedUser.getEmail()))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    @Transactional
+    void shouldReturnForbiddenWhenAccessingAnotherUsersProfile() throws Exception {
+        AppUser userA = createAppUser("user-a@example.com");
+        AppUser savedUserA = appUserRepository.saveAndFlush(userA);
+
+        AppUser userB = createAppUser("user-b@example.com");
+        AppUser savedUserB = appUserRepository.saveAndFlush(userB);
+
+        String tokenA = login(savedUserA.getEmail());
+
+        mockMvc.perform(get("/users/{id}", savedUserB.getId())
+                        .header("Authorization", "Bearer " + tokenA))
+                .andExpect(status().isForbidden());
     }
 
     @Test
